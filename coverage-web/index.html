@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Astro Coverage Atlas</title>
+
+  <!-- APPLY THEME BEFORE FIRST PAINT -->
+  <script>
+    (function () {
+      const theme = localStorage.getItem("theme");
+      if (theme !== "light") {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
+
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #000000;
+      --border: #ccc;
+      --hover: #eee;
+      --input-bg: #ffffff;
+    }
+
+    .dark {
+      --bg: #1e1e1e;
+      --fg: #eaeaea;
+      --border: #444;
+      --hover: #333;
+      --input-bg: #2a2a2a;
+    }
+
+    body {
+      margin: 0;
+      display: flex;
+      height: 100vh;
+      font-family: sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      transition: background 0.2s, color 0.2s;
+    }
+
+    #sidebar {
+      width: 300px;
+      border-right: 1px solid var(--border);
+      padding: 10px;
+      overflow-y: auto;
+      background: var(--bg);
+    }
+
+    #aladin-lite-div {
+      flex: 1;
+      min-height: 100vh;
+    }
+
+    .frame {
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .frame:hover {
+      background: var(--hover);
+    }
+
+    input, select, button {
+      width: 100%;
+      margin-bottom: 5px;
+      padding: 4px;
+      background: var(--input-bg);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
+
+    button {
+      padding: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="sidebar">
+  <button id="themeToggle"></button>
+
+  <h3>Телескоп</h3>
+  <select id="scopeSelect"></select>
+
+  <h3>Выбор даты</h3>
+  <select id="dateSelect"></select>
+
+  <h3>Фреймы</h3>
+  <div id="frames"></div>
+
+  <h3>Добавить телескоп</h3>
+  <form id="telescopeForm">
+    <input type="text" id="telescopeName" placeholder="Имя телескопа" required />
+    <input type="text" id="telescopePath" placeholder="Путь к FITS" required />
+    <button type="submit">Добавить</button>
+  </form>
+</div>
+
+<div id="aladin-lite-div"></div>
+
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js"></script>
+
+<script>
+/* =========================
+   THEME SWITCH
+========================= */
+const toggleBtn = document.getElementById("themeToggle");
+
+function setTheme(dark) {
+  document.documentElement.classList.toggle("dark", dark);
+  localStorage.setItem("theme", dark ? "dark" : "light");
+  toggleBtn.textContent = dark ? "☀ Светлая тема" : "🌙 Тёмная тема";
+}
+
+// initial button state
+setTheme(document.documentElement.classList.contains("dark"));
+
+toggleBtn.onclick = () => {
+  setTheme(!document.documentElement.classList.contains("dark"));
+};
+
+
+/* =========================
+   ALADIN + DATA
+========================= */
+let aladin;
+let overlay;
+let data = {};
+let colors = ["lime", "red", "blue", "orange", "cyan", "magenta"];
+
+function loadData() {
+  fetch("data.json")
+    .then(r => r.json())
+    .then(json => {
+      data = json;
+      updateScopeSelect();
+    })
+    .catch(() => data = {});
+}
+
+function initAladin() {
+  A.init.then(() => {
+    aladin = A.aladin('#aladin-lite-div', {
+      survey: "https://alaskybis.cds.unistra.fr/DSS/DSSColor",
+      fov: 60
+    });
+    overlay = A.graphicOverlay({ lineWidth: 3 });
+    aladin.addOverlay(overlay);
+    loadData();
+  });
+}
+
+function updateScopeSelect() {
+  const sel = document.getElementById("scopeSelect");
+  sel.innerHTML = "";
+
+  Object.keys(data).forEach(scope => {
+    const opt = document.createElement("option");
+    opt.value = scope;
+    opt.textContent = scope;
+    sel.appendChild(opt);
+  });
+
+  sel.onchange = updateDateSelect;
+  if (sel.options.length) updateDateSelect();
+}
+
+function updateDateSelect() {
+  const sel = document.getElementById("dateSelect");
+  sel.innerHTML = "";
+
+  let dates = new Set();
+  Object.values(data).forEach(s => Object.keys(s).forEach(d => dates.add(d)));
+
+  [...dates].sort().forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d;
+    sel.appendChild(opt);
+  });
+
+  sel.onchange = () => showDate(sel.value);
+  if (sel.options.length) showDate(sel.value);
+}
+
+function showDate(date) {
+  if (!overlay) return;
+
+  overlay.removeAll();
+  document.getElementById("frames").innerHTML = "";
+
+  let colorIndex = 0;
+
+  Object.entries(data).forEach(([scope, scopeData]) => {
+    const frames = scopeData[date];
+    if (!frames) return;
+
+    const color = colors[colorIndex++ % colors.length];
+
+    frames.forEach(frame => {
+      // ❗ ВАЖНО: передаём ЧИСТЫЕ координаты
+      overlay.add(
+        A.polygon(frame.polygon, {
+          color: color,
+          lineWidth: 3,
+          fill: false
+        })
+      );
+
+      const div = document.createElement("div");
+      div.className = "frame";
+	const file = frame.file ? frame.file.replace(/\.(fits|fit|fts)$/i, "") : "frame";
+	const time = frame.datetime || "";
+
+	div.textContent = `${scope} – ${time} – ${file}`;
+      div.onclick = () => {
+        const c = frame.polygon[0];
+        aladin.gotoRaDec(c[0], c[1], 3);
+      };
+
+      document.getElementById("frames").appendChild(div);
+    });
+  });
+}
+
+document.getElementById("telescopeForm").onsubmit = e => {
+  e.preventDefault();
+  fetch("/add_telescope", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: telescopeName.value,
+      path: telescopePath.value
+    })
+  }).then(() => loadData());
+};
+
+initAladin();
+</script>
+
+<script>
+
+function refreshData() {
+    fetch("/data.json")
+        .then(r => r.json())
+        .then(json => {
+            data = json;
+
+            // Сохраняем выбранные значения
+            const scopeSel = document.getElementById("scopeSelect");
+            const dateSel = document.getElementById("dateSelect");
+            const currentScope = scopeSel.value;
+            const currentDate = dateSel.value;
+
+            updateScopeSelect();
+
+            // Восстанавливаем выбор, если он ещё есть
+            if ([...scopeSel.options].some(o => o.value === currentScope)) {
+                scopeSel.value = currentScope;
+                updateDateSelect(); // обязательно обновляем даты после смены scope
+                if ([...dateSel.options].some(o => o.value === currentDate)) {
+                    dateSel.value = currentDate;
+                    showDate(currentDate);
+                }
+            }
+        })
+        .catch(console.error);
+}
+
+
+// каждые 10 секунд
+setInterval(refreshData, 10000);
+</script>
+
+
+</body>
+</html>

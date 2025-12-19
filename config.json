@@ -1,0 +1,9 @@
+{
+  "telescopes": [
+    {
+      "id": "newton",
+      "name": "Newton",
+      "fits_dir": "D:\\test"
+    }
+  ]
+}
