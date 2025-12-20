@@ -47,6 +47,8 @@
       padding: 10px;
       overflow-y: auto;
       background: var(--bg);
+      display: flex;
+      flex-direction: column;
     }
 
     #aladin-lite-div {
@@ -76,6 +78,10 @@
       padding: 6px;
       cursor: pointer;
     }
+
+    #regenBtn {
+      margin-top: auto;
+    }
   </style>
 </head>
 
@@ -100,7 +106,7 @@
     <button type="submit">Добавить</button>
   </form>
 
-  <button id="regenBtn" style="margin-top:10px;background:#f0ad4e;color:#000;">Перегенерировать data.json</button>
+  <button id="regenBtn">Перегенерировать data.json</button>
 </div>
 
 <div id="aladin-lite-div"></div>
