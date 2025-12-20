@@ -1,4 +1,6 @@
-import os, sys, json
+import os
+import sys
+import json
 from astropy.io import fits
 from astropy.wcs import WCS
 
@@ -8,6 +10,7 @@ DATA_JSON_PATH = os.path.join(BASE_DIR, "data.json")
 
 def generate():
     if not os.path.exists(CONFIG_PATH):
+        print("Config not found:", CONFIG_PATH)
         return
 
     with open(CONFIG_PATH, encoding="utf-8") as f:
@@ -20,14 +23,19 @@ def generate():
         fits_dir = scope["fits_dir"]
 
         if not os.path.exists(fits_dir):
+            print("FITS dir not found:", fits_dir)
             continue
 
-        for root, _, files in os.walk(fits_dir):
-            for name in files:
+        for date_folder in sorted(os.listdir(fits_dir)):
+            date_path = os.path.join(fits_dir, date_folder)
+            if not os.path.isdir(date_path):
+                continue
+
+            for name in sorted(os.listdir(date_path)):
                 if not name.lower().endswith((".fits", ".fit", ".fts")):
                     continue
 
-                path = os.path.join(root, name)
+                path = os.path.join(date_path, name)
                 try:
                     with fits.open(path, memmap=False) as hdul:
                         hdu = hdul[0]
@@ -46,13 +54,9 @@ def generate():
 
                         polygon = [[c.ra.deg, c.dec.deg] for c in corners]
 
-                        date_obs = hdu.header.get("DATE-OBS", "")
-                        date = date_obs[:10] if date_obs else "unknown"
-                        time = date_obs[11:19] if len(date_obs) >= 19 else ""
-
+                        date = date_folder
                         result.setdefault(sid, {}).setdefault(date, []).append({
                             "file": name,
-                            "datetime": f"{date} {time}".strip(),
                             "polygon": polygon
                         })
 
@@ -62,3 +66,7 @@ def generate():
     os.makedirs(os.path.dirname(DATA_JSON_PATH), exist_ok=True)
     with open(DATA_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
+    print("Data saved to", DATA_JSON_PATH)
+
+if __name__ == "__main__":
+    generate()

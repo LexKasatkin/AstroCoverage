@@ -99,6 +99,8 @@
     <input type="text" id="telescopePath" placeholder="Путь к FITS" required />
     <button type="submit">Добавить</button>
   </form>
+
+  <button id="regenBtn" style="margin-top:10px;background:#f0ad4e;color:#000;">Перегенерировать data.json</button>
 </div>
 
 <div id="aladin-lite-div"></div>
@@ -124,7 +126,6 @@ toggleBtn.onclick = () => {
   setTheme(!document.documentElement.classList.contains("dark"));
 };
 
-
 /* =========================
    ALADIN + DATA
 ========================= */
@@ -134,7 +135,7 @@ let data = {};
 let colors = ["lime", "red", "blue", "orange", "cyan", "magenta"];
 
 function loadData() {
-  fetch("data.json")
+  fetch("/data.json")
     .then(r => r.json())
     .then(json => {
       data = json;
@@ -203,7 +204,6 @@ function showDate(date) {
     const color = colors[colorIndex++ % colors.length];
 
     frames.forEach(frame => {
-      // ❗ ВАЖНО: передаём ЧИСТЫЕ координаты
       overlay.add(
         A.polygon(frame.polygon, {
           color: color,
@@ -214,10 +214,10 @@ function showDate(date) {
 
       const div = document.createElement("div");
       div.className = "frame";
-	const file = frame.file ? frame.file.replace(/\.(fits|fit|fts)$/i, "") : "frame";
-	const time = frame.datetime || "";
+      const file = frame.file ? frame.file.replace(/\.(fits|fit|fts)$/i, "") : "frame";
+      const time = frame.datetime || "";
 
-	div.textContent = `${scope} – ${time} – ${file}`;
+      div.textContent = `${scope} – ${time} – ${file}`;
       div.onclick = () => {
         const c = frame.polygon[0];
         aladin.gotoRaDec(c[0], c[1], 3);
@@ -240,29 +240,42 @@ document.getElementById("telescopeForm").onsubmit = e => {
   }).then(() => loadData());
 };
 
+// ===================
+// REGENERATE DATA.JSON
+// ===================
+document.getElementById("regenBtn").onclick = () => {
+  fetch("/regen_data", { method: "POST" })
+    .then(r => r.json())
+    .then(res => {
+      if (res.status === "ok") {
+        loadData();
+        alert("data.json перегенерирован");
+      } else {
+        alert("Ошибка: " + (res.message || "unknown"));
+      }
+    })
+    .catch(err => alert("Ошибка запроса: " + err));
+};
+
 initAladin();
-</script>
 
-<script>
-
+/* =========================
+   AUTO REFRESH
+========================= */
 function refreshData() {
     fetch("/data.json")
         .then(r => r.json())
         .then(json => {
             data = json;
-
-            // Сохраняем выбранные значения
             const scopeSel = document.getElementById("scopeSelect");
             const dateSel = document.getElementById("dateSelect");
             const currentScope = scopeSel.value;
             const currentDate = dateSel.value;
 
             updateScopeSelect();
-
-            // Восстанавливаем выбор, если он ещё есть
             if ([...scopeSel.options].some(o => o.value === currentScope)) {
                 scopeSel.value = currentScope;
-                updateDateSelect(); // обязательно обновляем даты после смены scope
+                updateDateSelect();
                 if ([...dateSel.options].some(o => o.value === currentDate)) {
                     dateSel.value = currentDate;
                     showDate(currentDate);
@@ -272,11 +285,8 @@ function refreshData() {
         .catch(console.error);
 }
 
-
-// каждые 10 секунд
 setInterval(refreshData, 10000);
 </script>
-
 
 </body>
 </html>

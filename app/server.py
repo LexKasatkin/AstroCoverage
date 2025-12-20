@@ -45,10 +45,21 @@ def add_telescope():
         "fits_dir": d["path"]
     })
     save_config(cfg)
-    generate()  # регенерируем data.json
+    generate() 
     return jsonify({"status": "ok"})
 
-# --- запуск сервера и watcher ---
+@app.route("/regen_data", methods=["POST"])
+def regen_data():
+    try:
+        if os.path.exists(DATA_JSON_PATH):
+            with open(DATA_JSON_PATH, "w", encoding="utf-8") as f:
+                f.write("{}")
+                
+        generate()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 def run_server():
     threading.Thread(target=start_watch, args=(lambda: print("coverage updated"),), daemon=True).start()
     app.run(port=8000)
