@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import threading
-import json           # <- вот этого не хватало
+import json         
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from coverage_generator import generate
@@ -27,7 +27,7 @@ class FitsHandler(FileSystemEventHandler):
         threading.Thread(target=self.run, daemon=True).start()
 
     def run(self):
-        time.sleep(2)  # ждём, пока файл допишется
+        time.sleep(2)
         print("New FITS detected → regenerating coverage")
         generate()
         if self.cb:
