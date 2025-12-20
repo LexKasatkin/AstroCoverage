@@ -225,9 +225,12 @@ function showDate(date) {
 
       div.textContent = `${scope} – ${time} – ${file}`;
       div.onclick = () => {
-        const c = frame.polygon[0];
-        aladin.gotoRaDec(c[0], c[1], 3);
-      };
+        const lons = frame.polygon.map(p => p[0]);
+        const lats = frame.polygon.map(p => p[1]);
+        const centerRA = (Math.min(...lons) + Math.max(...lons)) / 2;
+        const centerDec = (Math.min(...lats) + Math.max(...lats)) / 2;
+        aladin.gotoRaDec(centerRA, centerDec, 3);
+}     ;
 
       document.getElementById("frames").appendChild(div);
     });
