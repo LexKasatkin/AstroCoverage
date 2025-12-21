@@ -4,25 +4,15 @@
 <meta charset="UTF-8">
 <title>Astro Coverage Atlas</title>
 
-<script>
-(function () {
-  const theme = localStorage.getItem("theme"); 
-  if (theme !== "light") document.documentElement.classList.add("dark");
-})();
-</script>
-
 <style>
-:root { --bg:#fff; --fg:#000; --border:#ccc; --hover:#eee; --input-bg:#fff; }
-.dark { --bg:#1e1e1e; --fg:#eaeaea; --border:#444; --hover:#333; --input-bg:#2a2a2a; }
-
+:root { --bg:#1e1e1e; --fg:#eaeaea; --border:#444; --hover:#333; --input-bg:#2a2a2a; }
 body { margin:0; display:flex; height:100vh; font-family:sans-serif; background:var(--bg); color:var(--fg);}
 
 /* Sidebar */
 #sidebar { width:300px; border-right:1px solid var(--border); padding:10px; display:flex; flex-direction:column; overflow-y:auto; transition:width 0.2s;}
 
 /* Telescopes section */
-#telToggleContainer { display:flex; align-items:center; margin-bottom:5px; font-weight:bold; }
-#telToggleContainer input { margin-left:5px; }
+#telToggleBtn { margin-bottom:5px; font-weight:bold; cursor:pointer; }
 #telSection { display:none; transition:all 0.2s; margin-bottom:10px; }
 
 /* Aladin */
@@ -45,35 +35,28 @@ button { padding:4px; cursor:pointer; }
 #loader { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; align-items:center; justify-content:center; z-index:9998; }
 #loader div { padding:20px; background:var(--bg); color:var(--fg); border-radius:5px; font-weight:bold; }
 
-/* Theme toggle */
-#themeToggle { position:absolute; top:5px; left:5px; width:16px; height:16px;
-  border-radius:50%; border:1px solid var(--border); background:var(--input-bg);
-  opacity:0.3; cursor:pointer; z-index:10000; padding:0; }
-#themeToggle:hover { opacity:0.7; }
-
 /* Telescopes buttons */
 .tel-btn { border:none; background:none; cursor:pointer; padding:2px 4px; margin-left:2px; font-size:12px; }
 </style>
 </head>
 
 <body>
-<button id="themeToggle"></button>
 
 <div id="sidebar">
 
   <!-- ASTAP settings -->
   <button onclick="openSettings()">⚙ ASTAP</button>
 
-  <!-- Telescopes toggle -->
-  <div id="telToggleContainer">
-    Телескопы
-    <input type="checkbox" id="telToggle">
-  </div>
+  <!-- Telescopes toggle button -->
+  <button id="telToggleBtn">Показать телескопы</button>
 
   <!-- Telescopes section -->
   <div id="telSection">
     <div id="telescopes"></div>
   </div>
+
+  <!-- Add telescope button (на главный экран) -->
+  <button onclick="openTelescope()">+ Добавить телескоп</button>
 
   <h3>Выбор даты</h3>
   <select id="dateSelect"></select>
@@ -112,11 +95,6 @@ button { padding:4px; cursor:pointer; }
 
 <script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js"></script>
 <script>
-/* THEME */
-const toggleBtn=document.getElementById("themeToggle");
-function setTheme(d){ document.documentElement.classList.toggle("dark",d); localStorage.setItem("theme",d?"dark":"light"); }
-toggleBtn.onclick = ()=> setTheme(!document.documentElement.classList.contains("dark"));
-
 /* LOADER */
 const loader = document.getElementById("loader");
 let loaderShown = false;
@@ -233,9 +211,18 @@ function openSettings(){ settingsModal.style.display="flex"; }
 function closeSettings(){ settingsModal.style.display="none"; }
 function saveAstap(){ fetchWithLoader("/config/astap",{method:"POST", headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:astapPath.value})}).then(closeSettings); }
 
-/* TELESCOPES TOGGLE */
-const telToggle=document.getElementById("telToggle");
-telToggle.onchange=()=> document.getElementById("telSection").style.display=telToggle.checked?"block":"none";
+/* TELESCOPES TOGGLE BUTTON */
+const telToggleBtn = document.getElementById("telToggleBtn");
+telToggleBtn.onclick = ()=>{
+  const sec = document.getElementById("telSection");
+  if(sec.style.display==="none" || sec.style.display===""){
+    sec.style.display="block";
+    telToggleBtn.textContent="Скрыть телескопы";
+  } else {
+    sec.style.display="none";
+    telToggleBtn.textContent="Показать телескопы";
+  }
+};
 
 /* REGEN DATA */
 document.getElementById("regenBtn").onclick=()=>{ fetchWithLoader("/regen_data",{method:"POST"}).then(()=>{loadData(); alert("data.json перегенерирован")}); }
