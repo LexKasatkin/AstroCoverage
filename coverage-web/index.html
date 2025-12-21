@@ -12,8 +12,9 @@ body { margin:0; display:flex; height:100vh; font-family:sans-serif; background:
 #sidebar { width:300px; border-right:1px solid var(--border); padding:10px; display:flex; flex-direction:column; overflow-y:auto; transition:width 0.2s;}
 
 /* Telescopes section */
-#telToggleBtn { margin-bottom:5px; font-weight:bold; cursor:pointer; }
-#telSection { display:none; transition:all 0.2s; margin-bottom:10px; }
+#telToggle { display:flex; justify-content:space-between; align-items:center; cursor:pointer; font-weight:bold; margin-bottom:5px; }
+#telToggle span { user-select:none; }
+#telSection { overflow:hidden; max-height:0; transition:max-height 0.3s ease; margin-bottom:10px; }
 
 /* Aladin */
 #aladin-lite-div { flex:1; min-height:100vh;}
@@ -26,6 +27,9 @@ body { margin:0; display:flex; height:100vh; font-family:sans-serif; background:
 input, select, button { width:100%; margin-bottom:5px; padding:4px; background:var(--input-bg); color:var(--fg); border:1px solid var(--border); }
 button { padding:4px; cursor:pointer; }
 
+/* Special regen button */
+#regenBtn { margin-top:20px; }
+
 /* Modal */
 .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.6); z-index:9999; }
 .modal-content { background:var(--bg); padding:20px; min-width:300px; }
@@ -37,6 +41,10 @@ button { padding:4px; cursor:pointer; }
 
 /* Telescopes buttons */
 .tel-btn { border:none; background:none; cursor:pointer; padding:2px 4px; margin-left:2px; font-size:12px; }
+
+/* Toggle icon */
+#telToggle i { transition: transform 0.3s; display:inline-block; }
+#telToggle.open i { transform: rotate(180deg); }
 </style>
 </head>
 
@@ -47,8 +55,11 @@ button { padding:4px; cursor:pointer; }
   <!-- ASTAP settings -->
   <button onclick="openSettings()">⚙ ASTAP</button>
 
-  <!-- Telescopes toggle button -->
-  <button id="telToggleBtn">Показать телескопы</button>
+  <!-- Telescopes toggle -->
+  <div id="telToggle">
+    <span>Телескопы</span>
+    <i>▾</i>
+  </div>
 
   <!-- Telescopes section -->
   <div id="telSection">
@@ -64,7 +75,7 @@ button { padding:4px; cursor:pointer; }
   <h3>Фреймы</h3>
   <div id="frames"></div>
 
-  <button id="regenBtn">Перегенерировать data.json</button>
+  <button id="regenBtn">Перегенерировать данные</button>
 </div>
 
 <div id="aladin-lite-div"></div>
@@ -212,15 +223,15 @@ function closeSettings(){ settingsModal.style.display="none"; }
 function saveAstap(){ fetchWithLoader("/config/astap",{method:"POST", headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:astapPath.value})}).then(closeSettings); }
 
 /* TELESCOPES TOGGLE BUTTON */
-const telToggleBtn = document.getElementById("telToggleBtn");
-telToggleBtn.onclick = ()=>{
-  const sec = document.getElementById("telSection");
-  if(sec.style.display==="none" || sec.style.display===""){
-    sec.style.display="block";
-    telToggleBtn.textContent="Скрыть телескопы";
+const telToggle = document.getElementById("telToggle");
+const telSection = document.getElementById("telSection");
+telToggle.onclick = ()=>{
+  if(telSection.style.maxHeight && telSection.style.maxHeight !== "0px"){
+    telSection.style.maxHeight = "0";
+    telToggle.classList.remove("open");
   } else {
-    sec.style.display="none";
-    telToggleBtn.textContent="Показать телескопы";
+    telSection.style.maxHeight = telSection.scrollHeight + "px";
+    telToggle.classList.add("open");
   }
 };
 
