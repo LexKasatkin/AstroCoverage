@@ -2,14 +2,14 @@
   "astap_path": "C:\\Program Files\\astap\\astap_cli.exe",
   "telescopes": [
     {
-      "id": "newton",
-      "name": "Newton",
-      "fits_dir": "D:\\test"
-    },
-    {
       "id": "hyperstar",
       "name": "Hyperstar",
       "fits_dir": "D:\\test2"
+    },
+    {
+      "id": "\u043d\u0443\u0442\u043e\u043d",
+      "name": "\u041d\u0443\u0442\u043e\u043d",
+      "fits_dir": "D:\\test"
     }
   ]
 }
