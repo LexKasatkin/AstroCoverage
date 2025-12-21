@@ -297,7 +297,13 @@ function showFrames(date){
     const frames=scopeData[date];
     if(!frames) return;
 
-    const color = scopeColors[scope] || "white";
+    /* === FIX: стабильный индивидуальный цвет для каждого телескопа === */
+    if (!scopeColors[scope]) {
+      const idx = Object.keys(scopeColors).length;
+      scopeColors[scope] = colors[idx % colors.length];
+    }
+    const color = scopeColors[scope];
+    /* =============================================================== */
 
     frames.forEach(frame=>{
       overlay.add(A.polygon(frame.polygon,{color, lineWidth:3, fill:false}));
@@ -341,7 +347,6 @@ function loadConfig(){
       }
     });
 }
-
 
 function renderTelescopes(){
   const c=document.getElementById("telescopes");
