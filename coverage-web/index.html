@@ -88,7 +88,32 @@ button {
 }
 
 #regenBtn {
-  margin-top: 20px;
+  margin-top: 10px;
+}
+
+/* ===== PROGRESS BAR ===== */
+#progressWrap {
+  display:none;
+  margin-top:10px;
+}
+#progressOuter {
+  width:100%;
+  height:14px;
+  background:#333;
+  border-radius:7px;
+  overflow:hidden;
+}
+#progressInner {
+  height:100%;
+  width:0%;
+  background:lime;
+  transition:width 0.3s ease;
+}
+#progressText {
+  font-size:12px;
+  margin-top:4px;
+  text-align:center;
+  color:#ccc;
 }
 
 /* Loader */
@@ -194,6 +219,14 @@ button {
   <h3>Фреймы</h3>
   <div id="frames"></div>
 
+  <!-- PROGRESS BAR -->
+  <div id="progressWrap">
+    <div id="progressOuter">
+      <div id="progressInner"></div>
+    </div>
+    <div id="progressText">0%</div>
+  </div>
+
   <button id="regenBtn">Перегенерировать данные</button>
 </div>
 
@@ -229,6 +262,43 @@ const loader = document.getElementById("loader");
 let loaderShown = false;
 function showLoader(){ if(!loaderShown){ loader.style.display="flex"; loaderShown=true; } }
 function hideLoader(){ loader.style.display="none"; loaderShown=false; }
+
+/* ===== PROGRESS ===== */
+const progressWrap = document.getElementById("progressWrap");
+const progressInner = document.getElementById("progressInner");
+const progressText = document.getElementById("progressText");
+let progressTimer = null;
+
+function startProgress() {
+  if (progressTimer) return;
+  progressWrap.style.display = "block";
+
+  progressTimer = setInterval(async () => {
+    try {
+      const r = await fetch("/generation_status");
+      const s = await r.json();
+
+      if (!s.running) {
+        stopProgress();
+        loadData();
+        return;
+      }
+
+      const percent = s.total ? Math.round((s.done / s.total) * 100) : 0;
+      progressInner.style.width = percent + "%";
+      progressText.textContent = percent + "%";
+
+    } catch {}
+  }, 800);
+}
+
+function stopProgress() {
+  clearInterval(progressTimer);
+  progressTimer = null;
+  progressWrap.style.display = "none";
+  progressInner.style.width = "0%";
+  progressText.textContent = "0%";
+}
 
 /* ===== COLORS ===== */
 const colors = ["lime","red","blue","orange","cyan","magenta"];
@@ -345,9 +415,7 @@ function loadConfig(){
       rebuildScopeColors();
       renderTelescopes();
       astapPath.value=c.astap_path||"";
-      if (selectedDate) {
-        showFrames(selectedDate);
-      }
+      if (selectedDate) showFrames(selectedDate);
     });
 }
 
@@ -433,10 +501,8 @@ telToggle.onclick=()=>{
 
 /* ===== REGEN ===== */
 regenBtn.onclick=()=>{
-  showLoader();
-  fetch("/regen_data",{method:"POST"})
-    .then(()=>{ loadData(); alert("data.json перегенерирован"); })
-    .finally(hideLoader);
+  fetch("/regen_data",{method:"POST"});
+  startProgress();
 };
 
 loadConfig();

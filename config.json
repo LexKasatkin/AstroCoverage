@@ -2,7 +2,7 @@
   "astap_path": "C:\\Program Files\\astap\\astap_cli.exe",
   "telescopes": [
     {
-      "id": "newton",
+      "id": "\u043d\u044c\u044e\u0442\u043e\u043d",
       "name": "\u041d\u044c\u044e\u0442\u043e\u043d",
       "fits_dir": "D:\\test"
     },

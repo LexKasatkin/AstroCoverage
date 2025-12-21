@@ -3,7 +3,8 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
-app/build/main/Analysis-00.toc
-app/build/main/EXE-00.toc
 app/main.spec
-app/build/main/localpycs/struct.pyc
+__pycache__/*
+.gitignore
+app/__pycache__/*
+app/build/*

@@ -3,7 +3,7 @@ import sys
 import json
 import threading
 from flask import Flask, send_from_directory, request, jsonify
-from coverage_generator import generate
+from coverage_generator import generate, generation_status
 from watcher import start_watch
 
 # Базовая директория
@@ -108,6 +108,11 @@ def regen_data():
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+@app.route("/generation_status", methods=["GET"])
+def generation_status_api():
+    return jsonify(generation_status)
+
 
 # ======================
 # RUN SERVER

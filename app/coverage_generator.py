@@ -106,83 +106,143 @@ def read_polygon_from_wcs_file(wcs_path: str, image_shape):
 # -------------------- main --------------------
 
 def generate():
-    if not os.path.exists(CONFIG_PATH):
-        print("Config not found:", CONFIG_PATH)
-        return
+    global generation_status
 
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        cfg = json.load(f)
+    generation_status.update({
+        "running": True,
+        "stage": "init",
+        "current": "",
+        "done": 0,
+        "total": 0,
+        "error": None,
+    })
 
-    astap_path = cfg.get("astap_path")
-    result = {}
+    try:
+        if not os.path.exists(CONFIG_PATH):
+            raise RuntimeError("Config not found")
 
-    for scope in cfg.get("telescopes", []):
-        sid = scope["id"]
-        fits_dir = scope["fits_dir"]
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
 
-        if not os.path.exists(fits_dir):
-            continue
+        astap_path = cfg.get("astap_path")
+        result = {}
 
-        for date_folder in sorted(os.listdir(fits_dir)):
-            date_path = os.path.join(fits_dir, date_folder)
-            if not os.path.isdir(date_path):
+        # ===== STAGE 1: count total files =====
+        generation_status["stage"] = "counting"
+
+        total = 0
+        for scope in cfg.get("telescopes", []):
+            fits_dir = scope["fits_dir"]
+            if not os.path.exists(fits_dir):
                 continue
 
-            for name in sorted(os.listdir(date_path)):
-                if not name.lower().endswith((".fits", ".fit", ".fts")):
+            for date_folder in os.listdir(fits_dir):
+                date_path = os.path.join(fits_dir, date_folder)
+                if not os.path.isdir(date_path):
                     continue
 
-                input_fits = os.path.join(date_path, name)
+                for name in os.listdir(date_path):
+                    if name.lower().endswith((".fits", ".fit", ".fts")):
+                        total += 1
 
-                solved_fits = input_fits + ".solved.fits"
-                wcs_file = input_fits + ".solved.wcs"
+        generation_status["total"] = total
 
-                ra = dec = None
-                polygon = None
+        # ===== STAGE 2: processing =====
+        generation_status["stage"] = "processing"
 
-                try:
-                    with fits.open(input_fits) as hdul:
-                        if hdul[0].data is None:
-                            raise RuntimeError("FITS has no image data")
+        for scope in cfg.get("telescopes", []):
+            sid = scope["id"]
+            fits_dir = scope["fits_dir"]
 
-                        data = hdul[0].data
-                        header = hdul[0].header
-                        ra, dec = read_ra_dec(header)
+            if not os.path.exists(fits_dir):
+                continue
 
-                        if "CTYPE1" in header and "CTYPE2" in header:
-                            # WCS уже есть → используем header FITS
-                            wcs = WCS(header)
-                            h, w = data.shape
-                            pix = [(0, 0), (w, 0), (w, h), (0, h)]
-                            world = wcs.all_pix2world(pix, 0)
-                            polygon = [[float(r), float(d)] for r, d in world]
-                        else:
-                            if not os.path.exists(wcs_file):
-                                ok = solve_to_wcs(astap_path, input_fits, solved_fits)
-                                if not ok:
-                                    raise RuntimeError("ASTAP failed")
+            for date_folder in sorted(os.listdir(fits_dir)):
+                date_path = os.path.join(fits_dir, date_folder)
+                if not os.path.isdir(date_path):
+                    continue
 
-                            polygon = read_polygon_from_wcs_file(
-                                wcs_file,
-                                data.shape
-                            )
+                for name in sorted(os.listdir(date_path)):
+                    if not name.lower().endswith((".fits", ".fit", ".fts")):
+                        continue
 
-                except Exception as e:
-                    polygon = {"status": "failed", "reason": str(e)}
+                    generation_status["current"] = (
+                        f"{scope['name']} / {date_folder} / {name}"
+                    )
 
-                result.setdefault(sid, {}).setdefault(date_folder, []).append({
-                    "file": name,
-                    "ra": float(ra) if ra is not None else None,
-                    "dec": float(dec) if dec is not None else None,
-                    "polygon": polygon,
-                })
+                    input_fits = os.path.join(date_path, name)
+                    solved_fits = input_fits + ".solved.fits"
+                    wcs_file = input_fits + ".solved.wcs"
 
-    os.makedirs(os.path.dirname(DATA_JSON_PATH), exist_ok=True)
-    with open(DATA_JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2)
+                    ra = dec = None
+                    polygon = None
 
-    print("Data saved to", DATA_JSON_PATH)
+                    try:
+                        with fits.open(input_fits) as hdul:
+                            if hdul[0].data is None:
+                                raise RuntimeError("FITS has no image data")
 
+                            data = hdul[0].data
+                            header = hdul[0].header
+                            ra, dec = read_ra_dec(header)
+
+                            if "CTYPE1" in header and "CTYPE2" in header:
+                                wcs = WCS(header)
+                                h, w = data.shape
+                                pix = [(0, 0), (w, 0), (w, h), (0, h)]
+                                world = wcs.all_pix2world(pix, 0)
+                                polygon = [[float(r), float(d)] for r, d in world]
+                            else:
+                                if not os.path.exists(wcs_file):
+                                    ok = solve_to_wcs(
+                                        astap_path,
+                                        input_fits,
+                                        solved_fits,
+                                    )
+                                    if not ok:
+                                        raise RuntimeError("ASTAP failed")
+
+                                polygon = read_polygon_from_wcs_file(
+                                    wcs_file,
+                                    data.shape
+                                )
+
+                    except Exception as e:
+                        polygon = {"status": "failed", "reason": str(e)}
+
+                    result.setdefault(sid, {}).setdefault(date_folder, []).append({
+                        "file": name,
+                        "ra": float(ra) if ra is not None else None,
+                        "dec": float(dec) if dec is not None else None,
+                        "polygon": polygon,
+                    })
+
+                    generation_status["done"] += 1
+
+        # ===== SAVE RESULT =====
+        generation_status["stage"] = "saving"
+
+        with open(DATA_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2)
+
+    except Exception as e:
+        generation_status["error"] = str(e)
+
+    finally:
+        generation_status["running"] = False
+        generation_status["stage"] = "done"
+
+
+# ===== GENERATION STATUS =====
+
+generation_status = {
+    "running": False,
+    "stage": "",
+    "current": "",
+    "done": 0,
+    "total": 0,
+    "error": None,
+}
 
 if __name__ == "__main__":
     generate()
