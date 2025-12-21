@@ -26,11 +26,38 @@ body {
 /* Sidebar */
 #sidebar {
   width:300px;
-  border-right:1px solid var(--border);
-  padding:10px;
   display:flex;
   flex-direction:column;
-  overflow-y:auto;
+  height:100vh;
+  padding:10px;
+  border-right:1px solid var(--border);
+}
+
+/* Верхняя фиксированная часть */
+#sidebarTop {
+  flex: 0 0 auto;
+}
+
+/* Скроллируемая часть */
+#sidebarScroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  margin-top: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hover) var(--bg);
+}
+
+/* Webkit scrollbar */
+#sidebarScroll::-webkit-scrollbar {
+  width: 8px;
+}
+#sidebarScroll::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+#sidebarScroll::-webkit-scrollbar-thumb {
+  background-color: var(--hover);
+  border-radius: 4px;
+  border: 2px solid var(--bg);
 }
 
 /* Telescopes toggle */
@@ -200,34 +227,38 @@ button {
 
 <div id="sidebar">
 
-  <button onclick="openSettings()">⚙ ASTAP</button>
+  <div id="sidebarTop">
+    <button onclick="openSettings()">⚙ ASTAP</button>
 
-  <div id="telToggle">
-    <span>Телескопы</span>
-    <i>▾</i>
-  </div>
-
-  <div id="telSection">
-    <div id="telescopes"></div>
-  </div>
-
-  <button onclick="openTelescope()">+ Добавить телескоп</button>
-
-  <h3>Выбор даты</h3>
-  <select id="dateSelect"></select>
-
-  <h3>Фреймы</h3>
-  <div id="frames"></div>
-
-  <!-- PROGRESS BAR -->
-  <div id="progressWrap">
-    <div id="progressOuter">
-      <div id="progressInner"></div>
+    <div id="telToggle">
+      <span>Телескопы</span>
+      <i>▾</i>
     </div>
-    <div id="progressText">0%</div>
+
+    <div id="telSection">
+      <div id="telescopes"></div>
+    </div>
+
+    <button onclick="openTelescope()">+ Добавить телескоп</button>
+
+    <h3>Выбор даты</h3>
+    <select id="dateSelect"></select>
   </div>
 
-  <button id="regenBtn">Перегенерировать данные</button>
+  <div id="sidebarScroll">
+    <h3>Фреймы</h3>
+    <div id="frames"></div>
+
+    <!-- PROGRESS BAR -->
+    <div id="progressWrap">
+      <div id="progressOuter">
+        <div id="progressInner"></div>
+      </div>
+      <div id="progressText">0%</div>
+    </div>
+
+    <button id="regenBtn">Перегенерировать данные</button>
+  </div>
 </div>
 
 <div id="aladin-lite-div"></div>
@@ -306,6 +337,7 @@ let scopeColors = {};
 
 /* ===== DATA ===== */
 let aladin, overlay, data={}, selectedDate=null, config={};
+let lastData = null;
 
 /* ===== ALADIN ===== */
 function initAladin(){
@@ -318,17 +350,6 @@ function initAladin(){
 }
 
 /* ===== DATA LOAD ===== */
-function loadData(auto=false){
-  const fn = auto ? fetch : fetchWithLoader;
-  fn("/data.json")
-    .then(r=>r.json())
-    .then(json=>{
-      data=json;
-      updateDateSelect(selectedDate);
-    })
-    .catch(()=>data={});
-}
-
 async function fetchWithLoader(url, options){
   showLoader();
   try {
@@ -336,6 +357,23 @@ async function fetchWithLoader(url, options){
     return await res;
   } finally {
     hideLoader();
+  }
+}
+
+async function loadData(auto=false){
+  const fn = auto ? fetch : fetchWithLoader;
+  try {
+    const r = await fn("/data.json");
+    const json = await r.json();
+
+    const newData = JSON.stringify(json);
+    if(newData !== lastData){
+      data = json;
+      lastData = newData;
+      updateDateSelect(selectedDate);
+    }
+  } catch {
+    data={};
   }
 }
 
@@ -364,12 +402,12 @@ function updateDateSelect(preservedDate=null){
 
 /* ===== FRAMES ===== */
 function showFrames(date){
-  const framesDiv=document.getElementById("frames");
-  framesDiv.innerHTML="";
+  const framesDiv = document.getElementById("frames");
+  framesDiv.innerHTML = "";
   overlay.removeAll();
 
   Object.entries(data).forEach(([scope, scopeData])=>{
-    const frames=scopeData[date];
+    const frames = scopeData[date];
     if(!frames) return;
 
     if (!scopeColors[scope]) {
@@ -381,24 +419,25 @@ function showFrames(date){
     frames.forEach(frame=>{
       overlay.add(A.polygon(frame.polygon,{color, lineWidth:3, fill:false}));
 
-      const d=document.createElement("div");
-      d.className="frame";
-      const file=frame.file?.replace(/\.(fits|fit|fts)$/i,"")||"frame";
-      d.innerHTML=`<div>${scope}</div><div class="file">${file}</div>`;
-
-      d.onclick=()=>{
-        const lons=frame.polygon.map(p=>p[0]);
-        const lats=frame.polygon.map(p=>p[1]);
-        aladin.gotoRaDec(
-          (Math.min(...lons)+Math.max(...lons))/2,
-          (Math.min(...lats)+Math.max(...lats))/2,
-          3
-        );
-      };
-      framesDiv.appendChild(d);
+      const file = frame.file?.replace(/\.(fits|fit|fts)$/i,"") || "frame";
+      const div = document.createElement("div");
+      div.className = "frame";
+      div.dataset.ra = ((Math.min(...frame.polygon.map(p=>p[0])) + Math.max(...frame.polygon.map(p=>p[0])))/2);
+      div.dataset.dec = ((Math.min(...frame.polygon.map(p=>p[1])) + Math.max(...frame.polygon.map(p=>p[1])))/2);
+      div.innerHTML = `<div>${scope}</div><div class="file">${file}</div>`;
+      framesDiv.appendChild(div);
     });
   });
 }
+
+// Обработчик клика по фрейму (делегирование)
+document.getElementById("frames").addEventListener("click", e=>{
+  const f = e.target.closest(".frame");
+  if(!f) return;
+  const ra = parseFloat(f.dataset.ra);
+  const dec = parseFloat(f.dataset.dec);
+  aladin.gotoRaDec(ra, dec, 3);
+});
 
 /* ===== CONFIG ===== */
 function rebuildScopeColors(){
@@ -407,6 +446,7 @@ function rebuildScopeColors(){
     scopeColors[t.name] = colors[i % colors.length];
   });
 }
+
 function loadConfig(){
   fetchWithLoader("/config")
     .then(r=>r.json())
@@ -419,21 +459,33 @@ function loadConfig(){
     });
 }
 
+/* ===== TELESCOPES ===== */
 function renderTelescopes(){
-  const c=document.getElementById("telescopes");
-  c.innerHTML="";
+  const container = document.getElementById("telescopes");
+  container.innerHTML = "";
+
   config.telescopes.forEach(t=>{
-    const d=document.createElement("div");
-    d.className="frame";
-    d.innerHTML=`
+    const div = document.createElement("div");
+    div.className = "frame";
+    div.dataset.id = t.id;
+    div.innerHTML = `
       <b>${t.name}</b>
       <div style="margin-left:auto; display:flex; gap:4px;">
-        <button class="tel-btn edit" onclick="editTel('${t.id}')">✏</button>
-        <button class="tel-btn" onclick="delTel('${t.id}')">🗑</button>
+        <button class="tel-btn edit" data-id="${t.id}">✏</button>
+        <button class="tel-btn delete" data-id="${t.id}">🗑</button>
       </div>`;
-    c.appendChild(d);
+    container.appendChild(div);
   });
 }
+
+// Делегирование кликов по телескопам
+document.getElementById("telescopes").addEventListener("click", (e)=>{
+  const btn = e.target.closest(".tel-btn");
+  if(!btn) return;
+  const id = btn.dataset.id;
+  if(btn.classList.contains("edit")) editTel(id);
+  if(btn.classList.contains("delete")) delTel(id);
+});
 
 /* ===== TELESCOPES CRUD ===== */
 let editId=null;
