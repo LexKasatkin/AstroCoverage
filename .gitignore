@@ -5,6 +5,6 @@
 
 app/main.spec
 __pycache__/*
-.gitignore
 app/__pycache__/*
 app/build/*
+app/dist/*

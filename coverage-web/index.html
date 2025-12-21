@@ -456,13 +456,15 @@ function saveTelescope(){
   const payload={name:telName.value,path:telPath.value};
   const url=editId?`/config/telescope/${editId}`:"/config/telescope";
   closeTel();
-  showLoader();
+  startProgress();
   fetch(url,{
     method:editId?"PUT":"POST",
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(payload)
-  }).then(()=>{ loadConfig(); loadData(); })
-    .finally(hideLoader);
+  }).then(()=>{
+    loadConfig();
+    loadData();
+  }).finally(hideLoader);
 }
 function delTel(id){
   if(!confirm("Удалить телескоп?")) return;
