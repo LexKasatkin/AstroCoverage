@@ -38,23 +38,23 @@ body {
   flex: 0 0 auto;
 }
 
-/* Скроллируемая часть */
-#sidebarScroll {
+/* Скроллируемая часть — только фреймы */
+#framesScroll {
   flex: 1 1 auto;
   overflow-y: auto;
-  margin-top: 10px;
+  margin-top: 5px;
   scrollbar-width: thin;
   scrollbar-color: var(--hover) var(--bg);
 }
 
 /* Webkit scrollbar */
-#sidebarScroll::-webkit-scrollbar {
+#framesScroll::-webkit-scrollbar {
   width: 8px;
 }
-#sidebarScroll::-webkit-scrollbar-track {
+#framesScroll::-webkit-scrollbar-track {
   background: var(--bg);
 }
-#sidebarScroll::-webkit-scrollbar-thumb {
+#framesScroll::-webkit-scrollbar-thumb {
   background-color: var(--hover);
   border-radius: 4px;
   border: 2px solid var(--bg);
@@ -241,14 +241,6 @@ button {
 
     <button onclick="openTelescope()">+ Добавить телескоп</button>
 
-    <h3>Выбор даты</h3>
-    <select id="dateSelect"></select>
-  </div>
-
-  <div id="sidebarScroll">
-    <h3>Фреймы</h3>
-    <div id="frames"></div>
-
     <!-- PROGRESS BAR -->
     <div id="progressWrap">
       <div id="progressOuter">
@@ -258,6 +250,15 @@ button {
     </div>
 
     <button id="regenBtn">Перегенерировать данные</button>
+  </div>
+
+  <h3>Выбор даты</h3>
+  <select id="dateSelect"></select>
+
+  <h3>Фреймы</h3>
+
+  <div id="framesScroll">
+    <div id="frames"></div>
   </div>
 </div>
 
