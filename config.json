@@ -3,7 +3,12 @@
   "telescopes": [
     {
       "id": "newton",
-      "name": "Newton",
+      "name": "\u041d\u044c\u044e\u0442\u043e\u043d",
+      "fits_dir": "D:\\test"
+    },
+    {
+      "id": "\u0433\u0438\u043f\u0435\u0440\u0441\u0442\u0430\u0440",
+      "name": "\u0413\u0438\u043f\u0435\u0440\u0441\u0442\u0430\u0440",
       "fits_dir": "D:\\test2"
     }
   ]

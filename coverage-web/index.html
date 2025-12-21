@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Astro Coverage Atlas</title>
+<link rel="icon" type="image/png" href="favicon.png">
 
 <style>
 :root {
@@ -301,13 +302,11 @@ function showFrames(date){
     const frames=scopeData[date];
     if(!frames) return;
 
-    /* === FIX: стабильный индивидуальный цвет для каждого телескопа === */
     if (!scopeColors[scope]) {
       const idx = Object.keys(scopeColors).length;
       scopeColors[scope] = colors[idx % colors.length];
     }
     const color = scopeColors[scope];
-    /* =============================================================== */
 
     frames.forEach(frame=>{
       overlay.add(A.polygon(frame.polygon,{color, lineWidth:3, fill:false}));
