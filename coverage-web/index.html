@@ -5,54 +5,164 @@
 <title>Astro Coverage Atlas</title>
 
 <style>
-:root { --bg:#1e1e1e; --fg:#eaeaea; --border:#444; --hover:#333; --input-bg:#2a2a2a; }
-body { margin:0; display:flex; height:100vh; font-family:sans-serif; background:var(--bg); color:var(--fg);}
+:root {
+  --bg:#1e1e1e;
+  --fg:#eaeaea;
+  --border:#444;
+  --hover:#333;
+  --input-bg:#2a2a2a;
+}
+
+body {
+  margin:0;
+  display:flex;
+  height:100vh;
+  font-family:sans-serif;
+  background:var(--bg);
+  color:var(--fg);
+}
 
 /* Sidebar */
-#sidebar { width:300px; border-right:1px solid var(--border); padding:10px; display:flex; flex-direction:column; overflow-y:auto; transition:width 0.2s;}
+#sidebar {
+  width:300px;
+  border-right:1px solid var(--border);
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  overflow-y:auto;
+}
+
+/* Telescopes toggle */
+#telToggle {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  cursor:pointer;
+  font-weight:bold;
+  margin-bottom:5px;
+}
+#telToggle i {
+  transition: transform 0.3s;
+  display:inline-block;
+}
+#telToggle.open i {
+  transform: rotate(180deg);
+}
 
 /* Telescopes section */
-#telToggle { display:flex; justify-content:space-between; align-items:center; cursor:pointer; font-weight:bold; margin-bottom:5px; }
-#telToggle span { user-select:none; }
-#telSection { overflow:hidden; max-height:0; transition:max-height 0.3s ease, opacity 0.3s ease; margin-bottom:10px; opacity:0; }
+#telSection {
+  overflow:hidden;
+  max-height:0;
+  opacity:0;
+  transition:max-height 0.3s ease, opacity 0.3s ease;
+  margin-bottom:10px;
+}
 
 /* Aladin */
-#aladin-lite-div { flex:1; min-height:100vh;}
+#aladin-lite-div {
+  flex:1;
+  min-height:100vh;
+}
 
 /* Frames */
-.frame { cursor:pointer; padding:4px; display:flex; flex-direction:column; justify-content:flex-start; }
-.frame:hover { background:var(--hover); }
+.frame {
+  cursor:pointer;
+  padding:4px;
+}
+.frame:hover {
+  background:var(--hover);
+}
 
-/* Inputs and buttons */
-input, select, button { width:100%; margin-bottom:5px; padding:4px; background:var(--input-bg); color:var(--fg); border:1px solid var(--border); }
-button { padding:4px; cursor:pointer; }
-
-/* Special regen button */
-#regenBtn { margin-top:20px; }
-
-/* Modal */
-.modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.6); z-index:9999; }
-.modal-content { background:var(--bg); padding:20px; min-width:300px; }
-.modal input { width:100%; margin-bottom:6px; }
+/* Inputs */
+input, select, button {
+  width:100%;
+  margin-bottom:5px;
+  padding:4px;
+  background:var(--input-bg);
+  color:var(--fg);
+  border:1px solid var(--border);
+}
+button {
+  cursor:pointer;
+}
 
 /* Loader */
-#loader { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; align-items:center; justify-content:center; z-index:9998; }
-#loader div { padding:20px; background:var(--bg); color:var(--fg); border-radius:5px; font-weight:bold; }
+#loader {
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.3);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9998;
+}
+#loader div {
+  padding:20px;
+  background:var(--bg);
+  border-radius:5px;
+  font-weight:bold;
+}
 
-/* Telescopes buttons */
-.tel-btn { border:none; background:none; cursor:pointer; padding:2px 4px; margin-left:2px; font-size:16px; display:flex; align-items:center; justify-content:center; transition: transform 0.2s; }
-.tel-btn:hover { transform: scale(1.2); }
-.tel-btn.edit { transform: rotate(-45deg); } /* карандаш под углом */
+/* ===== TELESCOPES COMPACT FIX ===== */
+#telescopes .frame {
+  padding: 2px 4px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
 
-/* Название телескопа меньше */
-#telescopes .frame b { font-size: 14px; }
+#telescopes .frame b {
+  font-size:13px;
+  line-height:1.2;
+  font-weight:500;
+}
 
-/* Toggle icon */
-#telToggle i { transition: transform 0.3s; display:inline-block; }
-#telToggle.open i { transform: rotate(180deg); }
+.tel-btn {
+  border:none;
+  background:none;
+  cursor:pointer;
+  font-size:14px;
+  padding:0 2px;
+  height:18px;
+  width:18px;
+  line-height:18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:transform 0.2s;
+}
+.tel-btn:hover {
+  transform:scale(1.2);
+}
+.tel-btn.edit {
+  transform:rotate(-45deg);
+}
 
-/* Файл во второй строке */
-.frame .file { font-size:13px; color:#ccc; }
+/* Frame file second line */
+.frame .file {
+  font-size:13px;
+  color:#ccc;
+}
+
+/* Modal */
+.modal {
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.6);
+  z-index:9999;
+}
+.modal-content {
+  background:var(--bg);
+  padding:20px;
+  min-width:300px;
+}
+.modal input {
+  width:100%;
+  margin-bottom:6px;
+}
 </style>
 </head>
 
@@ -60,21 +170,17 @@ button { padding:4px; cursor:pointer; }
 
 <div id="sidebar">
 
-  <!-- ASTAP settings -->
   <button onclick="openSettings()">⚙ ASTAP</button>
 
-  <!-- Telescopes toggle -->
   <div id="telToggle">
     <span>Телескопы</span>
     <i>▾</i>
   </div>
 
-  <!-- Telescopes section -->
   <div id="telSection">
     <div id="telescopes"></div>
   </div>
 
-  <!-- Add telescope button -->
   <button onclick="openTelescope()">+ Добавить телескоп</button>
 
   <h3>Выбор даты</h3>
@@ -88,7 +194,6 @@ button { padding:4px; cursor:pointer; }
 
 <div id="aladin-lite-div"></div>
 
-<!-- LOADER -->
 <div id="loader"><div>Загрузка...</div></div>
 
 <!-- TELECOPE MODAL -->
@@ -114,42 +219,20 @@ button { padding:4px; cursor:pointer; }
 
 <script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js"></script>
 <script>
-/* LOADER */
+/* ===== LOADER ===== */
 const loader = document.getElementById("loader");
 let loaderShown = false;
 function showLoader(){ if(!loaderShown){ loader.style.display="flex"; loaderShown=true; } }
 function hideLoader(){ loader.style.display="none"; loaderShown=false; }
 
-/* ALADIN + DATA */
-let aladin, overlay, data={}, selectedDate=null;
-const colors=["lime","red","blue","orange","cyan","magenta"];
-function getColorForScope(scopeId){ 
-  const index=Math.abs([...scopeId].reduce((sum,c)=>sum+c.charCodeAt(0),0))%colors.length; 
-  return colors[index]; 
-}
+/* ===== COLORS ===== */
+const colors = ["lime","red","blue","orange","cyan","magenta"];
+let scopeColors = {};
 
-/* Загрузка данных: auto=true - без лоадера */
-function loadData(auto=false){
-  if(auto){
-    fetch("/data.json").then(res=>res.json()).then(json=>{
-      data=json;
-      updateDateSelect(selectedDate);
-    }).catch(()=>data={});
-  } else {
-    fetchWithLoader("/data.json").then(json=>{
-      data=json;
-      updateDateSelect(selectedDate);
-    }).catch(()=>data={});
-  }
-}
+/* ===== DATA ===== */
+let aladin, overlay, data={}, selectedDate=null, config={};
 
-/* FETCH WRAPPER */
-async function fetchWithLoader(url, options){
-  showLoader();
-  try { const res = await fetch(url, options); return await res.json(); }
-  finally{ hideLoader(); }
-}
-
+/* ===== ALADIN ===== */
 function initAladin(){
   A.init.then(()=>{
     aladin=A.aladin('#aladin-lite-div',{survey:"https://alaskybis.cds.unistra.fr/DSS/DSSColor", fov:60});
@@ -159,171 +242,197 @@ function initAladin(){
   });
 }
 
-/* DATE SELECT */
+/* ===== DATA LOAD ===== */
+function loadData(auto=false){
+  const fn = auto ? fetch : fetchWithLoader;
+  fn("/data.json")
+    .then(r=>r.json())
+    .then(json=>{
+      data=json;
+      updateDateSelect(selectedDate);
+    })
+    .catch(()=>data={});
+}
+
+async function fetchWithLoader(url, options){
+  showLoader();
+  try {
+    const res = await fetch(url, options);
+    return await res;
+  } finally {
+    hideLoader();
+  }
+}
+
+/* ===== DATE ===== */
 function updateDateSelect(preservedDate=null){
   const sel=document.getElementById("dateSelect");
   sel.innerHTML="";
   let dates=new Set();
-  Object.values(data).forEach(scopeData=>Object.keys(scopeData).forEach(d=>dates.add(d)));
+  Object.values(data).forEach(s=>Object.keys(s).forEach(d=>dates.add(d)));
   [...dates].sort().forEach(d=>{
-    const opt=document.createElement("option"); opt.value=d; opt.textContent=d; sel.appendChild(opt);
+    const o=document.createElement("option");
+    o.value=d; o.textContent=d;
+    sel.appendChild(o);
   });
 
   if(preservedDate && [...sel.options].some(o=>o.value===preservedDate)){
-    sel.value = preservedDate;
-    selectedDate = preservedDate;
+    sel.value=preservedDate;
   } else if(sel.options.length){
-    sel.value = sel.options[0].value;
-    selectedDate = sel.options[0].value;
+    sel.value=sel.options[0].value;
   }
 
-  showFrames(sel.value);
-  sel.onchange=()=>{ selectedDate = sel.value; showFrames(sel.value); };
+  selectedDate=sel.value;
+  showFrames(selectedDate);
+  sel.onchange=()=>{ selectedDate=sel.value; showFrames(sel.value); };
 }
 
-/* SHOW FRAMES */
-function showFrames(selectedDate){
-  const framesDiv = document.getElementById("frames"); 
-  framesDiv.innerHTML = "";
+/* ===== FRAMES ===== */
+function showFrames(date){
+  const framesDiv=document.getElementById("frames");
+  framesDiv.innerHTML="";
   overlay.removeAll();
-  
-  Object.entries(data).forEach(([scope, scopeData]) => {
-    const frames = selectedDate ? scopeData[selectedDate] : null; 
+
+  Object.entries(data).forEach(([scope, scopeData])=>{
+    const frames=scopeData[date];
     if(!frames) return;
-    
-    const color = getColorForScope(scope);
-    
-    frames.forEach(frame => {
-      overlay.add(A.polygon(frame.polygon, { color, lineWidth: 3, fill: false }));
 
-      const div = document.createElement("div"); 
-      div.className = "frame";
-      const file = frame.file ? frame.file.replace(/\.(fits|fit|fts)$/i,"") : "frame";
+    const color = scopeColors[scope] || "white";
 
-      // Две строки: название телескопа и файл
-      div.innerHTML = `<div>${scope}</div><div class="file">${file}</div>`;
+    frames.forEach(frame=>{
+      overlay.add(A.polygon(frame.polygon,{color, lineWidth:3, fill:false}));
 
-      div.onclick = () => {
-        const lons = frame.polygon.map(p => p[0]), lats = frame.polygon.map(p => p[1]);
-        const centerRA = (Math.min(...lons) + Math.max(...lons)) / 2;
-        const centerDec = (Math.min(...lats) + Math.max(...lats)) / 2;
-        aladin.gotoRaDec(centerRA, centerDec, 3);
+      const d=document.createElement("div");
+      d.className="frame";
+      const file=frame.file?.replace(/\.(fits|fit|fts)$/i,"")||"frame";
+      d.innerHTML=`<div>${scope}</div><div class="file">${file}</div>`;
+
+      d.onclick=()=>{
+        const lons=frame.polygon.map(p=>p[0]);
+        const lats=frame.polygon.map(p=>p[1]);
+        aladin.gotoRaDec(
+          (Math.min(...lons)+Math.max(...lons))/2,
+          (Math.min(...lats)+Math.max(...lats))/2,
+          3
+        );
       };
-
-      framesDiv.appendChild(div);
+      framesDiv.appendChild(d);
     });
   });
 }
 
-/* TELESCOPES + SETTINGS */
-let config={}, editId=null;
-function loadConfig(){
-  fetchWithLoader("/config").then(c=>{
-    config=c;
-    renderTelescopes();
-    astapPath.value=c.astap_path||"";
+/* ===== CONFIG ===== */
+function rebuildScopeColors(){
+  scopeColors = {};
+  config.telescopes.forEach((t,i)=>{
+    scopeColors[t.name] = colors[i % colors.length];
   });
 }
+function loadConfig(){
+  fetchWithLoader("/config")
+    .then(r=>r.json())
+    .then(c=>{
+      config=c;
+      rebuildScopeColors();
+      renderTelescopes();
+      astapPath.value=c.astap_path||"";
+      if (selectedDate) {
+        showFrames(selectedDate);
+      }
+    });
+}
+
 
 function renderTelescopes(){
-  const container=document.getElementById("telescopes");
-  container.innerHTML="";
+  const c=document.getElementById("telescopes");
+  c.innerHTML="";
   config.telescopes.forEach(t=>{
     const d=document.createElement("div");
     d.className="frame";
     d.innerHTML=`
       <b>${t.name}</b>
       <div style="margin-left:auto; display:flex; gap:4px;">
-        <button class="tel-btn edit" title="Редактировать" onclick="editTel('${t.id}')">✏</button>
-        <button class="tel-btn" title="Удалить" onclick="delTel('${t.id}')">🗑</button>
+        <button class="tel-btn edit" onclick="editTel('${t.id}')">✏</button>
+        <button class="tel-btn" onclick="delTel('${t.id}')">🗑</button>
       </div>`;
-    container.appendChild(d);
+    c.appendChild(d);
   });
-
-  if(container.parentElement.style.maxHeight && container.parentElement.style.maxHeight !== "0px"){
-    container.parentElement.style.maxHeight = container.scrollHeight + "px";
-  }
 }
 
-function openTelescope(){ 
-  editId=null; 
-  telTitle.textContent="Добавить телескоп"; 
-  telName.value=""; 
-  telPath.value=""; 
-  telModal.style.display="flex"; 
+/* ===== TELESCOPES CRUD ===== */
+let editId=null;
+function openTelescope(){
+  editId=null;
+  telTitle.textContent="Добавить телескоп";
+  telName.value="";
+  telPath.value="";
+  telModal.style.display="flex";
 }
-
-function editTel(id){ 
-  const t=config.telescopes.find(t=>t.id===id); 
-  editId=id; 
-  telTitle.textContent="Редактировать телескоп"; 
-  telName.value=t.name; 
-  telPath.value=t.fits_dir; 
-  telModal.style.display="flex"; 
+function editTel(id){
+  const t=config.telescopes.find(t=>t.id===id);
+  editId=id;
+  telTitle.textContent="Редактировать телескоп";
+  telName.value=t.name;
+  telPath.value=t.fits_dir;
+  telModal.style.display="flex";
 }
-
-function saveTelescope(){ 
-  const payload={name:telName.value,path:telPath.value}; 
-  const url=editId?`/config/telescope/${editId}`:"/config/telescope"; 
-  closeTel();           // закрываем диалог сразу
-  showLoader();         // показываем лоадер после закрытия
+function saveTelescope(){
+  const payload={name:telName.value,path:telPath.value};
+  const url=editId?`/config/telescope/${editId}`:"/config/telescope";
+  closeTel();
+  showLoader();
   fetch(url,{
-    method: editId?"PUT":"POST",
+    method:editId?"PUT":"POST",
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(payload)
-  })
-  .then(()=>{ loadConfig(); loadData(); })
-  .finally(hideLoader);
+  }).then(()=>{ loadConfig(); loadData(); })
+    .finally(hideLoader);
 }
-
-function delTel(id){ 
-  if(!confirm("Удалить телескоп?")) return; 
+function delTel(id){
+  if(!confirm("Удалить телескоп?")) return;
   showLoader();
   fetch(`/config/telescope/${id}`,{method:"DELETE"})
     .then(()=>{ loadConfig(); loadData(); })
     .finally(hideLoader);
 }
-
 function closeTel(){ telModal.style.display="none"; }
 
+/* ===== SETTINGS ===== */
 function openSettings(){ settingsModal.style.display="flex"; }
 function closeSettings(){ settingsModal.style.display="none"; }
-
-function saveAstap(){ 
-  const payload={path:astapPath.value};
+function saveAstap(){
   showLoader();
-  fetch("/config/astap",{method:"POST", headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
-    .then(()=>{ closeSettings(); loadConfig(); loadData(); })
+  fetch("/config/astap",{
+    method:"POST",
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({path:astapPath.value})
+  }).then(()=>{ closeSettings(); loadConfig(); loadData(); })
     .finally(hideLoader);
 }
 
-/* TELESCOPES TOGGLE BUTTON */
-const telToggle = document.getElementById("telToggle");
-const telSection = document.getElementById("telSection");
-telToggle.onclick = ()=>{
-  if(telSection.style.maxHeight && telSection.style.maxHeight !== "0px"){
-    telSection.style.maxHeight = "0";
-    telSection.style.opacity = 0;
+/* ===== TOGGLE ===== */
+telToggle.onclick=()=>{
+  if(telSection.style.maxHeight && telSection.style.maxHeight!=="0px"){
+    telSection.style.maxHeight="0";
+    telSection.style.opacity=0;
     telToggle.classList.remove("open");
   } else {
-    telSection.style.maxHeight = telSection.scrollHeight + "px";
-    telSection.style.opacity = 1;
+    telSection.style.maxHeight=telSection.scrollHeight+"px";
+    telSection.style.opacity=1;
     telToggle.classList.add("open");
   }
 };
 
-/* REGEN DATA */
-document.getElementById("regenBtn").onclick=()=>{
+/* ===== REGEN ===== */
+regenBtn.onclick=()=>{
   showLoader();
   fetch("/regen_data",{method:"POST"})
     .then(()=>{ loadData(); alert("data.json перегенерирован"); })
     .finally(hideLoader);
-}
+};
 
 loadConfig();
 initAladin();
-
-/* AUTO REFRESH без лоадера */
 setInterval(()=>loadData(true),10000);
 </script>
 

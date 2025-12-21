@@ -2,13 +2,13 @@
   "astap_path": "C:\\Program Files\\astap\\astap_cli.exe",
   "telescopes": [
     {
-      "id": "\u0433\u0438\u043f\u0435\u0440\u0441\u0442\u0430\u0440",
-      "name": "\u0413\u0438\u043f\u0435\u0440\u0441\u0442\u0430\u0440",
+      "id": "newton",
+      "name": "Newton",
       "fits_dir": "D:\\test2"
     },
     {
-      "id": "\u043d\u044c\u044e\u0442\u043e\u043d",
-      "name": "\u041d\u044c\u044e\u0442\u043e\u043d",
+      "id": "\u0433\u0438\u043f\u0435\u0440\u0441\u0442\u0430\u0440",
+      "name": "\u0413\u0438\u043f\u0435\u0440\u0441\u0442\u0430\u0440",
       "fits_dir": "D:\\test"
     }
   ]
