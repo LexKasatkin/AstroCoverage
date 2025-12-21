@@ -195,6 +195,20 @@ button {
   transform:rotate(-45deg);
 }
 
+#telToggle i {
+  display:inline-block;
+  width:0;
+  height:0;
+  border-left:6px solid transparent;
+  border-right:6px solid transparent;
+  border-top:6px solid var(--fg);
+  transition: transform 0.3s;
+}
+
+#telToggle.open i {
+  transform: rotate(180deg);
+}
+
 /* Frame file second line */
 .frame .file {
   font-size:13px;
@@ -232,7 +246,7 @@ button {
 
     <div id="telToggle">
       <span>Телескопы</span>
-      <i>▾</i>
+      <i></i>
     </div>
 
     <div id="telSection">
