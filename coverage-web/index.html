@@ -14,7 +14,7 @@ body { margin:0; display:flex; height:100vh; font-family:sans-serif; background:
 /* Telescopes section */
 #telToggle { display:flex; justify-content:space-between; align-items:center; cursor:pointer; font-weight:bold; margin-bottom:5px; }
 #telToggle span { user-select:none; }
-#telSection { overflow:hidden; max-height:0; transition:max-height 0.3s ease; margin-bottom:10px; }
+#telSection { overflow:hidden; max-height:0; transition:max-height 0.3s ease, opacity 0.3s ease; margin-bottom:10px; opacity:0; }
 
 /* Aladin */
 #aladin-lite-div { flex:1; min-height:100vh;}
@@ -40,7 +40,9 @@ button { padding:4px; cursor:pointer; }
 #loader div { padding:20px; background:var(--bg); color:var(--fg); border-radius:5px; font-weight:bold; }
 
 /* Telescopes buttons */
-.tel-btn { border:none; background:none; cursor:pointer; padding:2px 4px; margin-left:2px; font-size:12px; }
+.tel-btn { border:none; background:none; cursor:pointer; padding:2px 4px; margin-left:2px; font-size:16px; display:flex; align-items:center; justify-content:center; transition: transform 0.2s; }
+.tel-btn:hover { transform: scale(1.2); }
+.tel-btn.edit { transform: rotate(-45deg); } /* карандаш под углом */
 
 /* Toggle icon */
 #telToggle i { transition: transform 0.3s; display:inline-block; }
@@ -66,7 +68,7 @@ button { padding:4px; cursor:pointer; }
     <div id="telescopes"></div>
   </div>
 
-  <!-- Add telescope button (на главный экран) -->
+  <!-- Add telescope button -->
   <button onclick="openTelescope()">+ Добавить телескоп</button>
 
   <h3>Выбор даты</h3>
@@ -110,7 +112,7 @@ button { padding:4px; cursor:pointer; }
 const loader = document.getElementById("loader");
 let loaderShown = false;
 function showLoader(){ if(!loaderShown){ loader.style.display="flex"; loaderShown=true; } }
-function hideLoader(){ loader.style.display="none"; }
+function hideLoader(){ loader.style.display="none"; loaderShown=false; }
 
 /* FETCH WRAPPER */
 async function fetchWithLoader(url, options){
@@ -197,30 +199,62 @@ function loadConfig(){
     astapPath.value=c.astap_path||"";
   });
 }
+
 function renderTelescopes(){
-  const container=document.getElementById("telescopes"); 
+  const container=document.getElementById("telescopes");
   container.innerHTML="";
   config.telescopes.forEach(t=>{
-    const d=document.createElement("div"); 
+    const d=document.createElement("div");
     d.className="frame";
-    d.innerHTML=`<b>${t.name}</b>
-      <div style="margin-left:auto;">
-        <button class="tel-btn" onclick="editTel('${t.id}')">✏</button>
-        <button class="tel-btn" onclick="delTel('${t.id}')">🗑</button>
+    d.innerHTML=`
+      <b>${t.name}</b>
+      <div style="margin-left:auto; display:flex; gap:4px;">
+        <button class="tel-btn edit" title="Редактировать" onclick="editTel('${t.id}')">✏</button>
+        <button class="tel-btn" title="Удалить" onclick="delTel('${t.id}')">🗑</button>
       </div>`;
     container.appendChild(d);
   });
+
+  // Анимация открытия секции
+  if(container.parentElement.style.maxHeight && container.parentElement.style.maxHeight !== "0px"){
+    container.parentElement.style.maxHeight = container.scrollHeight + "px";
+  }
 }
 
 function openTelescope(){ editId=null; telTitle.textContent="Добавить телескоп"; telName.value=""; telPath.value=""; telModal.style.display="flex"; }
 function editTel(id){ const t=config.telescopes.find(t=>t.id===id); editId=id; telTitle.textContent="Редактировать телескоп"; telName.value=t.name; telPath.value=t.fits_dir; telModal.style.display="flex"; }
-function saveTelescope(){ const payload={name:telName.value,path:telPath.value}; const url=editId?`/config/telescope/${editId}`:"/config/telescope"; fetchWithLoader(url,{method:editId?"PUT":"POST", headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}).then(()=>{closeTel(); loadConfig();}); }
-function delTel(id){ if(!confirm("Удалить телескоп?")) return; fetchWithLoader(`/config/telescope/${id}`,{method:"DELETE"}).then(()=>loadConfig()); }
+function saveTelescope(){ 
+  const payload={name:telName.value,path:telPath.value}; 
+  const url=editId?`/config/telescope/${editId}`:"/config/telescope"; 
+  showLoader();
+  fetch(url,{
+    method: editId?"PUT":"POST",
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  })
+  .then(()=>{ closeTel(); loadConfig(); loadData(); })
+  .finally(hideLoader);
+}
+
+function delTel(id){ 
+  if(!confirm("Удалить телескоп?")) return; 
+  showLoader();
+  fetch(`/config/telescope/${id}`,{method:"DELETE"})
+    .then(()=>{ loadConfig(); loadData(); })
+    .finally(hideLoader);
+}
+
 function closeTel(){ telModal.style.display="none"; }
 
 function openSettings(){ settingsModal.style.display="flex"; }
 function closeSettings(){ settingsModal.style.display="none"; }
-function saveAstap(){ fetchWithLoader("/config/astap",{method:"POST", headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:astapPath.value})}).then(closeSettings); }
+function saveAstap(){ 
+  const payload={path:astapPath.value};
+  showLoader();
+  fetch("/config/astap",{method:"POST", headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+    .then(()=>{ closeSettings(); loadConfig(); loadData(); })
+    .finally(hideLoader);
+}
 
 /* TELESCOPES TOGGLE BUTTON */
 const telToggle = document.getElementById("telToggle");
@@ -228,15 +262,22 @@ const telSection = document.getElementById("telSection");
 telToggle.onclick = ()=>{
   if(telSection.style.maxHeight && telSection.style.maxHeight !== "0px"){
     telSection.style.maxHeight = "0";
+    telSection.style.opacity = 0;
     telToggle.classList.remove("open");
   } else {
     telSection.style.maxHeight = telSection.scrollHeight + "px";
+    telSection.style.opacity = 1;
     telToggle.classList.add("open");
   }
 };
 
 /* REGEN DATA */
-document.getElementById("regenBtn").onclick=()=>{ fetchWithLoader("/regen_data",{method:"POST"}).then(()=>{loadData(); alert("data.json перегенерирован")}); }
+document.getElementById("regenBtn").onclick=()=>{
+  showLoader();
+  fetch("/regen_data",{method:"POST"})
+    .then(()=>{ loadData(); alert("data.json перегенерирован"); })
+    .finally(hideLoader);
+}
 
 loadConfig();
 initAladin();
