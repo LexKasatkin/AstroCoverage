@@ -1,5 +1,5 @@
 {
-  "astap_path": "C:\\Program Files\\astap\\astap.exe",
+  "astap_path": "C:\\Program Files\\astap\\astap_cli.exe",
   "telescopes": [
     {
       "id": "newton",
