@@ -44,6 +44,9 @@ button { padding:4px; cursor:pointer; }
 .tel-btn:hover { transform: scale(1.2); }
 .tel-btn.edit { transform: rotate(-45deg); } /* карандаш под углом */
 
+/* Название телескопа меньше */
+#telescopes .frame b { font-size: 14px; }
+
 /* Toggle icon */
 #telToggle i { transition: transform 0.3s; display:inline-block; }
 #telToggle.open i { transform: rotate(180deg); }
@@ -114,23 +117,31 @@ let loaderShown = false;
 function showLoader(){ if(!loaderShown){ loader.style.display="flex"; loaderShown=true; } }
 function hideLoader(){ loader.style.display="none"; loaderShown=false; }
 
-/* FETCH WRAPPER */
-async function fetchWithLoader(url, options){
-  showLoader();
-  try { const res = await fetch(url, options); return await res.json(); }
-  finally{ hideLoader(); }
-}
-
 /* ALADIN + DATA */
 let aladin, overlay, data={}, selectedDate=null;
 const colors=["lime","red","blue","orange","cyan","magenta"];
 function getColorForScope(scopeId){ const index=Math.abs([...scopeId].reduce((sum,c)=>sum+c.charCodeAt(0),0))%colors.length; return colors[index]; }
 
-function loadData(){
-  fetchWithLoader("/data.json").then(json=>{
-    data=json;
-    updateDateSelect(selectedDate);
-  }).catch(()=>data={});
+/* Загрузка данных: auto=true - без лоадера */
+function loadData(auto=false){
+  if(auto){
+    fetch("/data.json").then(res=>res.json()).then(json=>{
+      data=json;
+      updateDateSelect(selectedDate);
+    }).catch(()=>data={});
+  } else {
+    fetchWithLoader("/data.json").then(json=>{
+      data=json;
+      updateDateSelect(selectedDate);
+    }).catch(()=>data={});
+  }
+}
+
+/* FETCH WRAPPER */
+async function fetchWithLoader(url, options){
+  showLoader();
+  try { const res = await fetch(url, options); return await res.json(); }
+  finally{ hideLoader(); }
 }
 
 function initAladin(){
@@ -161,10 +172,7 @@ function updateDateSelect(preservedDate=null){
   }
 
   showFrames(sel.value);
-  sel.onchange=()=>{
-    selectedDate = sel.value;
-    showFrames(sel.value);
-  };
+  sel.onchange=()=>{ selectedDate = sel.value; showFrames(sel.value); };
 }
 
 /* SHOW FRAMES */
@@ -215,14 +223,28 @@ function renderTelescopes(){
     container.appendChild(d);
   });
 
-  // Анимация открытия секции
   if(container.parentElement.style.maxHeight && container.parentElement.style.maxHeight !== "0px"){
     container.parentElement.style.maxHeight = container.scrollHeight + "px";
   }
 }
 
-function openTelescope(){ editId=null; telTitle.textContent="Добавить телескоп"; telName.value=""; telPath.value=""; telModal.style.display="flex"; }
-function editTel(id){ const t=config.telescopes.find(t=>t.id===id); editId=id; telTitle.textContent="Редактировать телескоп"; telName.value=t.name; telPath.value=t.fits_dir; telModal.style.display="flex"; }
+function openTelescope(){ 
+  editId=null; 
+  telTitle.textContent="Добавить телескоп"; 
+  telName.value=""; 
+  telPath.value=""; 
+  telModal.style.display="flex"; 
+}
+
+function editTel(id){ 
+  const t=config.telescopes.find(t=>t.id===id); 
+  editId=id; 
+  telTitle.textContent="Редактировать телескоп"; 
+  telName.value=t.name; 
+  telPath.value=t.fits_dir; 
+  telModal.style.display="flex"; 
+}
+
 function saveTelescope(){ 
   const payload={name:telName.value,path:telPath.value}; 
   const url=editId?`/config/telescope/${editId}`:"/config/telescope"; 
@@ -248,6 +270,7 @@ function closeTel(){ telModal.style.display="none"; }
 
 function openSettings(){ settingsModal.style.display="flex"; }
 function closeSettings(){ settingsModal.style.display="none"; }
+
 function saveAstap(){ 
   const payload={path:astapPath.value};
   showLoader();
@@ -282,8 +305,8 @@ document.getElementById("regenBtn").onclick=()=>{
 loadConfig();
 initAladin();
 
-/* AUTO REFRESH */
-setInterval(()=>loadData(),10000);
+/* AUTO REFRESH без лоадера */
+setInterval(()=>loadData(true),10000);
 </script>
 
 </body>
