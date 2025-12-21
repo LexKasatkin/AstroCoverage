@@ -20,7 +20,7 @@ body { margin:0; display:flex; height:100vh; font-family:sans-serif; background:
 #aladin-lite-div { flex:1; min-height:100vh;}
 
 /* Frames */
-.frame { cursor:pointer; padding:4px; display:flex; justify-content:space-between; align-items:center; }
+.frame { cursor:pointer; padding:4px; display:flex; flex-direction:column; justify-content:flex-start; }
 .frame:hover { background:var(--hover); }
 
 /* Inputs and buttons */
@@ -50,6 +50,9 @@ button { padding:4px; cursor:pointer; }
 /* Toggle icon */
 #telToggle i { transition: transform 0.3s; display:inline-block; }
 #telToggle.open i { transform: rotate(180deg); }
+
+/* Файл во второй строке */
+.frame .file { font-size:13px; color:#ccc; }
 </style>
 </head>
 
@@ -120,7 +123,10 @@ function hideLoader(){ loader.style.display="none"; loaderShown=false; }
 /* ALADIN + DATA */
 let aladin, overlay, data={}, selectedDate=null;
 const colors=["lime","red","blue","orange","cyan","magenta"];
-function getColorForScope(scopeId){ const index=Math.abs([...scopeId].reduce((sum,c)=>sum+c.charCodeAt(0),0))%colors.length; return colors[index]; }
+function getColorForScope(scopeId){ 
+  const index=Math.abs([...scopeId].reduce((sum,c)=>sum+c.charCodeAt(0),0))%colors.length; 
+  return colors[index]; 
+}
 
 /* Загрузка данных: auto=true - без лоадера */
 function loadData(auto=false){
@@ -177,22 +183,33 @@ function updateDateSelect(preservedDate=null){
 
 /* SHOW FRAMES */
 function showFrames(selectedDate){
-  const framesDiv=document.getElementById("frames"); framesDiv.innerHTML="";
+  const framesDiv = document.getElementById("frames"); 
+  framesDiv.innerHTML = "";
   overlay.removeAll();
-  Object.entries(data).forEach(([scope, scopeData])=>{
-    const frames = selectedDate? scopeData[selectedDate]: null; if(!frames) return;
+  
+  Object.entries(data).forEach(([scope, scopeData]) => {
+    const frames = selectedDate ? scopeData[selectedDate] : null; 
+    if(!frames) return;
+    
     const color = getColorForScope(scope);
-    frames.forEach(frame=>{
-      overlay.add(A.polygon(frame.polygon,{color,lineWidth:3,fill:false}));
-      const div=document.createElement("div"); div.className="frame";
-      const file = frame.file? frame.file.replace(/\.(fits|fit|fts)$/i,""):"frame";
-      div.innerHTML=`<span>${scope} – ${frame.datetime||""} – ${file}</span>`;
-      div.onclick=()=>{
-        const lons=frame.polygon.map(p=>p[0]), lats=frame.polygon.map(p=>p[1]);
-        const centerRA=(Math.min(...lons)+Math.max(...lons))/2;
-        const centerDec=(Math.min(...lats)+Math.max(...lats))/2;
+    
+    frames.forEach(frame => {
+      overlay.add(A.polygon(frame.polygon, { color, lineWidth: 3, fill: false }));
+
+      const div = document.createElement("div"); 
+      div.className = "frame";
+      const file = frame.file ? frame.file.replace(/\.(fits|fit|fts)$/i,"") : "frame";
+
+      // Две строки: название телескопа и файл
+      div.innerHTML = `<div>${scope}</div><div class="file">${file}</div>`;
+
+      div.onclick = () => {
+        const lons = frame.polygon.map(p => p[0]), lats = frame.polygon.map(p => p[1]);
+        const centerRA = (Math.min(...lons) + Math.max(...lons)) / 2;
+        const centerDec = (Math.min(...lats) + Math.max(...lats)) / 2;
         aladin.gotoRaDec(centerRA, centerDec, 3);
       };
+
       framesDiv.appendChild(div);
     });
   });
@@ -248,13 +265,14 @@ function editTel(id){
 function saveTelescope(){ 
   const payload={name:telName.value,path:telPath.value}; 
   const url=editId?`/config/telescope/${editId}`:"/config/telescope"; 
-  showLoader();
+  closeTel();           // закрываем диалог сразу
+  showLoader();         // показываем лоадер после закрытия
   fetch(url,{
     method: editId?"PUT":"POST",
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(payload)
   })
-  .then(()=>{ closeTel(); loadConfig(); loadData(); })
+  .then(()=>{ loadConfig(); loadData(); })
   .finally(hideLoader);
 }
 
