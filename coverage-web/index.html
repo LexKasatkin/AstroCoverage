@@ -451,10 +451,10 @@ function showFrames(date){
  frames.forEach(frame=>{
   if (!frame.polygon || !Array.isArray(frame.polygon) || frame.polygon.length === 0) return;
 
-  const [ra, dec] = frame.polygon[0];
+  const { ra, dec } = getPolygonCenter(frame.polygon);
   const file = frame.file?.replace(/\.(fits|fit|fts)$/i,"") || "frame";
 
-  framesFlat.push({ ra, dec, file });
+  framesFlat.push({ ra, dec, file, scope });
 });
 });
 // При первой загрузке
@@ -504,7 +504,7 @@ function renderNextPage(reset = false) {
     const f = framesFlat[i];
     html += `
       <div class="frame" data-ra="${f.ra}" data-dec="${f.dec}">
-        <div>${f.file}</div>
+        <div>${f.scope} - ${f.file}</div>
       </div>
     `;
   }
@@ -530,6 +530,24 @@ function renderNextPage(reset = false) {
     framesDiv.appendChild(sentinel);
   }
 }
+
+function getPolygonCenter(polygon) {
+  let minRa = Infinity, maxRa = -Infinity;
+  let minDec = Infinity, maxDec = -Infinity;
+
+  polygon.forEach(([ra, dec]) => {
+    minRa = Math.min(minRa, ra);
+    maxRa = Math.max(maxRa, ra);
+    minDec = Math.min(minDec, dec);
+    maxDec = Math.max(maxDec, dec);
+  });
+
+  return {
+    ra: (minRa + maxRa) / 2,
+    dec: (minDec + maxDec) / 2
+  };
+}
+
 
 /* ===== CONFIG ===== */
 function rebuildScopeColors(){

@@ -1,10 +1,4 @@
 {
   "astap_path": "C:\\Program Files\\astap\\astap_cli.exe",
-  "telescopes": [
-    {
-      "id": "newton",
-      "name": "Newton",
-      "fits_dir": "D:\\test"
-    }
-  ]
+  "telescopes": [] 
 }
