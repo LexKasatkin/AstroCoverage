@@ -432,8 +432,6 @@ function showFrames(date){
     const color = scopeColors[scope];
 
     frames.forEach(frame=>{
-      overlay.add(A.polygon(frame.polygon,{color, lineWidth:3, fill:false}));
-
       const file = frame.file?.replace(/\.(fits|fit|fts)$/i,"") || "frame";
       const div = document.createElement("div");
       div.className = "frame";
@@ -441,6 +439,10 @@ function showFrames(date){
       div.dataset.dec = ((Math.min(...frame.polygon.map(p=>p[1])) + Math.max(...frame.polygon.map(p=>p[1])))/2);
       div.innerHTML = `<div>${scope}</div><div class="file">${file}</div>`;
       framesDiv.appendChild(div);
+    })
+
+    frames.forEach(frame=>{
+      overlay.add(A.polygon(frame.polygon,{color, lineWidth:3, fill:false}));
     });
   });
 }
