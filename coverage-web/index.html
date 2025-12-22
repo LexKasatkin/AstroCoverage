@@ -309,6 +309,9 @@ let loaderShown = false;
 function showLoader(){ if(!loaderShown){ loader.style.display="flex"; loaderShown=true; } }
 function hideLoader(){ loader.style.display="none"; loaderShown=false; }
 
+let PAGE_SIZE = 50; // количество фреймов на страницу
+let page = 0;       // текущая страница
+
 /* ===== PROGRESS ===== */
 const progressWrap = document.getElementById("progressWrap");
 const progressInner = document.getElementById("progressInner");
@@ -415,53 +418,95 @@ function updateDateSelect(preservedDate=null){
   sel.onchange=()=>{ selectedDate=sel.value; showFrames(sel.value); };
 }
 
-/* ===== FRAMES ===== */
-function showFrames(date){
+/* ===== FRAMES ===== */function showFrames(date){
   const framesDiv = document.getElementById("frames");
   framesDiv.innerHTML = "";
   overlay.removeAll();
 
-  Object.entries(data).forEach(([scope, scopeData])=>{
-    const frames = scopeData[date];
-    if(!frames) return;
+  framesFlat = [];
+  page = 0; // сброс страницы
 
-    if (!scopeColors[scope]) {
-      const idx = Object.keys(scopeColors).length;
-      scopeColors[scope] = colors[idx % colors.length];
-    }
-    const color = scopeColors[scope];
+ Object.entries(data).forEach(([scope, scopeData])=>{
+  const frames = scopeData[date];
+  if(!Array.isArray(frames)) return;  // <-- добавляем эту проверку
 
-    frames.forEach(frame=>{
-      const file = frame.file?.replace(/\.(fits|fit|fts)$/i,"") || "frame";
-      const div = document.createElement("div");
-      div.className = "frame";
-      div.dataset.ra = ((Math.min(...frame.polygon.map(p=>p[0])) + Math.max(...frame.polygon.map(p=>p[0])))/2);
-      div.dataset.dec = ((Math.min(...frame.polygon.map(p=>p[1])) + Math.max(...frame.polygon.map(p=>p[1])))/2);
-      div.innerHTML = `<div>${scope}</div><div class="file">${file}</div>`;
-      framesDiv.appendChild(div);
-    })
+  if (!scopeColors[scope]) {
+    const idx = Object.keys(scopeColors).length;
+    scopeColors[scope] = colors[idx % colors.length];
+  }
+  const color = scopeColors[scope];
+  // overlay остаётся без изменений
+  frames.forEach(frame=>{
+  if (!frame.polygon || !Array.isArray(frame.polygon) || frame.polygon.length === 0) return;
 
-    frames.forEach(frame=>{
-      overlay.add(A.polygon(frame.polygon,{color, lineWidth:3, fill:false}));
-    });
+  const firstPoint = frame.polygon[0];
+
+  if (!Array.isArray(firstPoint) || firstPoint.length < 2) return;
+
+  overlay.add(A.polygon(frame.polygon, { color, lineWidth:2, fill:false }));
   });
-}
 
-// Обработчик клика по фрейму (делегирование)
-document.getElementById("frames").addEventListener("click", e=>{
-  const f = e.target.closest(".frame");
-  if(!f) return;
-  const ra = parseFloat(f.dataset.ra);
-  const dec = parseFloat(f.dataset.dec);
-  aladin.gotoRaDec(ra, dec, 3);
+
+ frames.forEach(frame=>{
+  if (!frame.polygon || !Array.isArray(frame.polygon) || frame.polygon.length === 0) return;
+
+  const [ra, dec] = frame.polygon[0];
+  const file = frame.file?.replace(/\.(fits|fit|fts)$/i,"") || "frame";
+
+  framesFlat.push({ ra, dec, file });
+});
 });
 
-/* ===== CONFIG ===== */
-function rebuildScopeColors(){
-  scopeColors = {};
-  config.telescopes.forEach((t,i)=>{
-    scopeColors[t.name] = colors[i % colors.length];
+  renderNextPage(true); // рендерим первую страницу
+}
+
+function renderNextPage(reset=false){
+  const framesDiv = document.getElementById("frames");
+
+  if(reset) page = 0;
+
+  const start = page * PAGE_SIZE;
+  const end = Math.min(start + PAGE_SIZE, framesFlat.length);
+  if (start >= end) return;
+
+  let html = "";
+  for (let i = start; i < end; i++) {
+    const f = framesFlat[i];
+    html += `
+      <div class="frame" data-ra="${f.ra}" data-dec="${f.dec}">
+        <div>${f.file}</div>
+      </div>
+    `;
+  }
+
+  framesDiv.insertAdjacentHTML("beforeend", html);
+
+  // ===== Добавляем обработку клика =====
+  const newFrames = framesDiv.querySelectorAll(`.frame[data-ra][data-dec]`);
+  newFrames.forEach(frameEl => {
+    frameEl.onclick = () => {
+      const ra = parseFloat(frameEl.dataset.ra);
+      const dec = parseFloat(frameEl.dataset.dec);
+      gotoRaDec(ra, dec); // ваша функция перехода
+    };
   });
+
+  page++;
+
+  // Добавляем кнопку "Загрузить ещё", если есть что грузить
+  let loadMore = document.getElementById("loadMoreBtn");
+  if(page * PAGE_SIZE < framesFlat.length){
+    if(!loadMore){
+      loadMore = document.createElement("button");
+      loadMore.id = "loadMoreBtn";
+      loadMore.textContent = "Загрузить ещё";
+      loadMore.style.margin="10px 0";
+      loadMore.onclick = ()=>renderNextPage();
+      framesDiv.appendChild(loadMore);
+    }
+  } else if(loadMore){
+    loadMore.remove();
+  }
 }
 
 function loadConfig(){
