@@ -457,15 +457,43 @@ function showFrames(date){
   framesFlat.push({ ra, dec, file });
 });
 });
-
-  renderNextPage(true); // рендерим первую страницу
+// При первой загрузке
+setupObserver();
+renderNextPage(true);
 }
 
+let observer;
+let sentinel;
 
-function renderNextPage(reset=false){
+function setupObserver() {
+  if (!sentinel) {
+    const framesDiv = document.getElementById("frames");
+    sentinel = document.createElement("div");
+    sentinel.id = "scroll-sentinel";
+    sentinel.style.height = "1px"; // маленький невидимый маркер
+    framesDiv.appendChild(sentinel);
+  }
+
+  if (!observer) {
+    observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && page * PAGE_SIZE < framesFlat.length) {
+          renderNextPage();
+        }
+      });
+    }, {
+      root: null,
+      rootMargin: "50px",
+      threshold: 0
+    });
+    observer.observe(sentinel);
+  }
+}
+
+function renderNextPage(reset = false) {
   const framesDiv = document.getElementById("frames");
 
-  if(reset) page = 0;
+  if (reset) page = 0;
 
   const start = page * PAGE_SIZE;
   const end = Math.min(start + PAGE_SIZE, framesFlat.length);
@@ -483,33 +511,23 @@ function renderNextPage(reset=false){
 
   framesDiv.insertAdjacentHTML("beforeend", html);
 
-for (let i = start; i < end; i++) {
-  const frameEl = framesDiv.querySelector(`.frame[data-ra="${framesFlat[i].ra}"][data-dec="${framesFlat[i].dec}"]`);
-  if (frameEl) {
-    frameEl.addEventListener("click", () => {
-      const ra = parseFloat(frameEl.dataset.ra);
-      const dec = parseFloat(frameEl.dataset.dec);
-      aladin.gotoRaDec(ra, dec, 0.5);
-    });
+  // Добавляем обработчики клика на новые фреймы
+  for (let i = start; i < end; i++) {
+    const frameEl = framesDiv.querySelector(`.frame[data-ra="${framesFlat[i].ra}"][data-dec="${framesFlat[i].dec}"]`);
+    if (frameEl) {
+      frameEl.addEventListener("click", () => {
+        const ra = parseFloat(frameEl.dataset.ra);
+        const dec = parseFloat(frameEl.dataset.dec);
+        aladin.gotoRaDec(ra, dec, 0.5);
+      });
+    }
   }
-}
-
 
   page++;
 
-  // Добавляем кнопку "Загрузить ещё", если есть что грузить
-  let loadMore = document.getElementById("loadMoreBtn");
-  if(page * PAGE_SIZE < framesFlat.length){
-    if(!loadMore){
-      loadMore = document.createElement("button");
-      loadMore.id = "loadMoreBtn";
-      loadMore.textContent = "Загрузить ещё";
-      loadMore.style.margin="10px 0";
-      loadMore.onclick = ()=>renderNextPage();
-      framesDiv.appendChild(loadMore);
-    }
-  } else if(loadMore){
-    loadMore.remove();
+  // Перемещаем маркер в конец списка
+  if (sentinel) {
+    framesDiv.appendChild(sentinel);
   }
 }
 
