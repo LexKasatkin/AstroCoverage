@@ -460,6 +460,7 @@ function updateDateSelect(preservedDate=null){
   renderNextPage(true); // рендерим первую страницу
 }
 
+
 function renderNextPage(reset=false){
   const framesDiv = document.getElementById("frames");
 
@@ -481,16 +482,6 @@ function renderNextPage(reset=false){
 
   framesDiv.insertAdjacentHTML("beforeend", html);
 
-  // ===== Добавляем обработку клика =====
-  const newFrames = framesDiv.querySelectorAll(`.frame[data-ra][data-dec]`);
-  newFrames.forEach(frameEl => {
-    frameEl.onclick = () => {
-      const ra = parseFloat(frameEl.dataset.ra);
-      const dec = parseFloat(frameEl.dataset.dec);
-      gotoRaDec(ra, dec); // ваша функция перехода
-    };
-  });
-
   page++;
 
   // Добавляем кнопку "Загрузить ещё", если есть что грузить
@@ -507,6 +498,14 @@ function renderNextPage(reset=false){
   } else if(loadMore){
     loadMore.remove();
   }
+}
+
+/* ===== CONFIG ===== */
+function rebuildScopeColors(){
+  scopeColors = {};
+  config.telescopes.forEach((t,i)=>{
+    scopeColors[t.name] = colors[i % colors.length];
+  });
 }
 
 function loadConfig(){
