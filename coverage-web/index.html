@@ -418,7 +418,8 @@ function updateDateSelect(preservedDate=null){
   sel.onchange=()=>{ selectedDate=sel.value; showFrames(sel.value); };
 }
 
-/* ===== FRAMES ===== */function showFrames(date){
+/* ===== FRAMES ===== */
+function showFrames(date){
   const framesDiv = document.getElementById("frames");
   framesDiv.innerHTML = "";
   overlay.removeAll();
@@ -481,6 +482,18 @@ function renderNextPage(reset=false){
   }
 
   framesDiv.insertAdjacentHTML("beforeend", html);
+
+for (let i = start; i < end; i++) {
+  const frameEl = framesDiv.querySelector(`.frame[data-ra="${framesFlat[i].ra}"][data-dec="${framesFlat[i].dec}"]`);
+  if (frameEl) {
+    frameEl.addEventListener("click", () => {
+      const ra = parseFloat(frameEl.dataset.ra);
+      const dec = parseFloat(frameEl.dataset.dec);
+      aladin.gotoRaDec(ra, dec, 0.5);
+    });
+  }
+}
+
 
   page++;
 
