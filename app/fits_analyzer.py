@@ -13,9 +13,10 @@ from astropy.stats import mad_std
 from photutils.detection import DAOStarFinder
 from scipy.optimize import curve_fit
 
-# --------------------------------------------------
-# Silence FITS warnings
-# --------------------------------------------------
+# ==================================================
+# CONFIG
+# ==================================================
+
 warnings.filterwarnings("ignore", category=FITSFixedWarning)
 
 # ==================================================
@@ -39,13 +40,15 @@ def measure_fwhm(data, max_stars=50):
 
         fwhm_list = []
         for s in stars[:max_stars]:
-            x, y = int(s['xcentroid']), int(s['ycentroid'])
+            x, y = int(s["xcentroid"]), int(s["ycentroid"])
             r = 7
             cut = data[y-r:y+r+1, x-r:x+r+1]
             if cut.shape != (2*r+1, 2*r+1):
                 continue
+
             yy, xx = np.mgrid[:cut.shape[0], :cut.shape[1]]
             p0 = (cut.max(), r, r, 2.0, 2.0, np.median(cut))
+
             try:
                 popt, _ = curve_fit(gaussian_2d, (xx, yy), cut.ravel(), p0=p0, maxfev=2000)
                 sx, sy = popt[3], popt[4]
@@ -53,9 +56,11 @@ def measure_fwhm(data, max_stars=50):
                     fwhm_list.append(2.355 * np.sqrt(sx * sy))
             except:
                 continue
+
         return np.median(fwhm_list) if fwhm_list else None
     except:
         return None
+
 
 # ==================================================
 # WCS helpers
@@ -65,10 +70,8 @@ def read_wcs_header(wcs_path):
     if not os.path.exists(wcs_path):
         return None
     try:
-        with open(wcs_path, 'r', encoding='utf-8') as f:
-            text = f.read()
-        header = fits.Header.fromstring(text, sep='\n')
-        return header
+        with open(wcs_path, "r", encoding="utf-8") as f:
+            return fits.Header.fromstring(f.read(), sep="\n")
     except:
         return None
 
@@ -82,10 +85,8 @@ def read_polygon_from_wcs_file(wcs_path, image_shape):
         h, w = image_shape
         pix = [(0, 0), (w, 0), (w, h), (0, h)]
         world = wcs.all_pix2world(pix, 0)
-        polygon = [[float(p[0]), float(p[1])] for p in world]
-        return polygon, header
-    except Exception as e:
-        print("WCS read error:", e)
+        return [[float(x), float(y)] for x, y in world], header
+    except:
         return None, None
 
 
@@ -95,7 +96,7 @@ def compute_polygon_from_header(header, shape):
         h, w = shape
         pix = [(0, 0), (w, 0), (w, h), (0, h)]
         world = wcs.all_pix2world(pix, 0)
-        return [[float(p[0]), float(p[1])] for p in world]
+        return [[float(x), float(y)] for x, y in world]
     except:
         return None
 
@@ -111,16 +112,19 @@ def extract_wcs_fields(header):
     ]
     return {k: header.get(k) for k in keys if k in header}
 
+
 # ==================================================
-# ASTAP helpers
+# ASTAP
 # ==================================================
 
 def solve_to_wcs(astap_path, fits_path):
     if not os.path.exists(astap_path) or not os.path.exists(fits_path):
         return False
     try:
-        subprocess.run([astap_path, "-f", fits_path, "-o", fits_path, "-update"],
-                       capture_output=True, text=True, check=True)
+        subprocess.run(
+            [astap_path, "-f", fits_path, "-o", fits_path, "-update"],
+            capture_output=True, text=True, check=True
+        )
         return True
     except:
         return False
@@ -128,44 +132,49 @@ def solve_to_wcs(astap_path, fits_path):
 
 def run_astap_analysis(astap_path, fits_path):
     try:
-        result = subprocess.run([astap_path, "-f", fits_path, "-analyse"],
-                                capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            [astap_path, "-f", fits_path, "-analyse"],
+            capture_output=True, text=True, timeout=15
+        )
         hfd = re.search(r"HFD_MEDIAN\s*=\s*([\d\.]+)", result.stdout)
         stars = re.search(r"STARS\s*=\s*(\d+)", result.stdout)
-        return float(hfd.group(1)) if hfd else None, int(stars.group(1)) if stars else None
+        return (
+            float(hfd.group(1)) if hfd else None,
+            int(stars.group(1)) if stars else None
+        )
     except:
         return None, None
 
+
 # ==================================================
-# FITS processing
+# MAIN PROCESS
 # ==================================================
 
-def process_fits(astap_path, fits_path, db_cur):
+def process_fits(astap_path, fits_path, conn, cur):
     json_path = fits_path + ".json"
+
     if os.path.exists(json_path):
         print("SKIP:", fits_path)
         return
 
     print("PROCESS:", fits_path)
+
     try:
-        with fits.open(fits_path) as hdul:
+        with fits.open(fits_path, ignore_missing_end=True) as hdul:
             data = hdul[0].data
             header = hdul[0].header
-            if data is None:
-                raise RuntimeError("No image data")
 
-            # Handle RGB / multi-axis
+            if data is None:
+                return
+
             if data.ndim == 3:
-                if data.shape[0] <= 4:  # shape like (channels, H, W)
-                    data = data[0]
-                else:  # shape like (H, W, channels)
-                    data = data[:, :, 0]
+                data = data[0] if data.shape[0] <= 4 else data[:, :, 0]
 
             data = data.astype(float)
 
-            # RA/DEC from header
-            ra, dec = None, None
-            for k1, k2 in [("RA","DEC"),("OBJCTRA","OBJCTDEC"),("CRVAL1","CRVAL2")]:
+            # RA / DEC
+            ra = dec = None
+            for k1, k2 in [("RA", "DEC"), ("OBJCTRA", "OBJCTDEC"), ("CRVAL1", "CRVAL2")]:
                 if k1 in header and k2 in header:
                     try:
                         ra, dec = float(header[k1]), float(header[k2])
@@ -173,53 +182,46 @@ def process_fits(astap_path, fits_path, db_cur):
                     except:
                         pass
 
-            # ------------------------------
-            # WCS & polygon
-            # ------------------------------
             polygon = None
             wcs_header = None
             wcs_source = "NONE"
+            plate_solved = False
+
             wcs_path = os.path.splitext(fits_path)[0] + ".wcs"
 
-            # Try WCS file first
             polygon, wcs_header = read_polygon_from_wcs_file(wcs_path, data.shape)
             if polygon:
                 wcs_source = "WCS_FILE"
+                plate_solved = True
 
-            # Try ASTAP solving
             if polygon is None and astap_path:
                 if solve_to_wcs(astap_path, fits_path):
                     polygon, wcs_header = read_polygon_from_wcs_file(wcs_path, data.shape)
                     if polygon:
                         wcs_source = "ASTAP"
+                        plate_solved = True
 
-            # Fallback to FITS header
             if polygon is None:
                 polygon = compute_polygon_from_header(header, data.shape)
                 wcs_header = header
                 wcs_source = "FITS"
 
-            # ASTAP analysis
             hfd, stars_count = run_astap_analysis(astap_path, fits_path)
 
-            # FWHM
             fwhm_px = measure_fwhm(data)
             fwhm_arcsec = None
             try:
                 if fwhm_px:
                     w = WCS(header)
-                    pixel_scale = np.sqrt((w.pixel_scale_matrix ** 2).sum(axis=0))
-                    scale_x, scale_y = pixel_scale * 3600
-                    fwhm_arcsec = float(fwhm_px * (scale_x + scale_y) / 2)
+                    px = np.sqrt((w.pixel_scale_matrix ** 2).sum(axis=0))
+                    fwhm_arcsec = float(fwhm_px * px.mean() * 3600)
             except:
                 pass
 
-            # Extract WCS fields
             wcs_fields = extract_wcs_fields(wcs_header) if wcs_header else {}
 
-            # JSON record
             record = {
-                "file": os.path.basename(fits_path),
+                "file_name": os.path.basename(fits_path),
                 "ra": ra,
                 "dec": dec,
                 "polygon": polygon,
@@ -229,38 +231,55 @@ def process_fits(astap_path, fits_path, db_cur):
                 "fwhm_arcsec": fwhm_arcsec,
                 "wcs_fields": wcs_fields,
                 "wcs_source": wcs_source,
+                "plate_solved": plate_solved,
+                "exptime": header.get("EXPTIME"),
+                "date_obs": header.get("DATE-OBS"),
+                "date_loc": header.get("DATE-LOC"),
+                "instrument": header.get("INSTRUME"),
+                "camera": header.get("CAMERAID"),
+                "telescope": header.get("TELESCOP"),
+                "ccd_temp": header.get("CCD-TEMP"),
+                "gain": header.get("GAIN"),
+                "offset": header.get("OFFSET"),
                 "header": {k: str(v) for k, v in header.items()}
             }
 
-            # Write JSON
+            # JSON
             with open(json_path, "w") as f:
                 json.dump(record, f, indent=2)
 
-            # Insert into SQLite
-            db_cur.execute("""
+            # DB
+            cur.execute("""
                 INSERT OR REPLACE INTO fits_data (
-                    file_name, ra, dec, polygon, hfd, stars,
+                    file_name, ra, dec, polygon,
+                    hfd, stars,
                     fwhm_px, fwhm_arcsec,
-                    wcs_fields, wcs_source, header,
+                    wcs_fields, wcs_source, plate_solved,
                     exptime, date_obs, date_loc,
                     instrument, camera, telescope,
-                    ccd_temp, gain, offset
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ccd_temp, gain, offset,
+                    header
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
-                record["file"], ra, dec, json.dumps(polygon),
-                hfd, stars_count,
-                fwhm_px, fwhm_arcsec,
-                json.dumps(wcs_fields), wcs_source,
-                json.dumps(record["header"]),
-                header.get("EXPTIME"), header.get("DATE-OBS"), header.get("DATE-LOC"),
-                header.get("INSTRUME"), header.get("CAMERAID"), header.get("TELESCOP"),
-                header.get("CCD-TEMP"), header.get("GAIN"), header.get("OFFSET")
+                record["file_name"],
+                record["ra"], record["dec"],
+                json.dumps(record["polygon"]),
+                record["hfd"], record["stars"],
+                record["fwhm_px"], record["fwhm_arcsec"],
+                json.dumps(record["wcs_fields"]),
+                record["wcs_source"], int(record["plate_solved"]),
+                record["exptime"], record["date_obs"], record["date_loc"],
+                record["instrument"], record["camera"], record["telescope"],
+                record["ccd_temp"], record["gain"], record["offset"],
+                json.dumps(record["header"])
             ))
 
+            conn.commit()
             print("OK:", fits_path)
 
     except Exception as e:
         print("ERROR:", fits_path, e)
+
 
 # ==================================================
 # DATABASE
@@ -268,6 +287,9 @@ def process_fits(astap_path, fits_path, db_cur):
 
 def init_db(db_path):
     conn = sqlite3.connect(db_path)
+    # conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS fits_data (
@@ -282,7 +304,7 @@ def init_db(db_path):
             fwhm_arcsec REAL,
             wcs_fields TEXT,
             wcs_source TEXT,
-            header TEXT,
+            plate_solved INTEGER,
             exptime REAL,
             date_obs TEXT,
             date_loc TEXT,
@@ -291,14 +313,16 @@ def init_db(db_path):
             telescope TEXT,
             ccd_temp REAL,
             gain REAL,
-            offset REAL
+            offset REAL,
+            header TEXT
         )
     """)
     conn.commit()
     return conn, cur
 
+
 # ==================================================
-# MAIN
+# ENTRY
 # ==================================================
 
 def generate_database(config_path, db_path):
@@ -319,17 +343,12 @@ def generate_database(config_path, db_path):
                 continue
 
             for name in sorted(os.listdir(date_path)):
-                if not name.lower().endswith((".fits", ".fit", ".fts")):
-                    continue
-                process_fits(astap_path, os.path.join(date_path, name), cur)
+                if name.lower().endswith((".fits", ".fit", ".fts")):
+                    process_fits(astap_path, os.path.join(date_path, name), conn, cur)
 
-    conn.commit()
     conn.close()
     print("DATABASE READY:", db_path)
 
-# ==================================================
-# ENTRY
-# ==================================================
 
 if __name__ == "__main__":
     BASE_DIR = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.abspath(".")
