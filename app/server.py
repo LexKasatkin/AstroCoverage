@@ -147,6 +147,7 @@ def data_json():
             if not date_raw:
                 continue
 
+            # приводим к YYYY-MM-DD
             date = date_raw[:10]
 
             if not date:
@@ -161,6 +162,10 @@ def data_json():
             result[telescope][date].append(d)
 
         return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # ======================
 # CONFIG API
@@ -248,3 +253,4 @@ def run_server():
 
 if __name__ == "__main__":
     run_server()
+
