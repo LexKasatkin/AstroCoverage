@@ -13,6 +13,7 @@ from astropy.time import Time
 import astropy.units as u
 from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy_healpix import HEALPix
+from starextractor import parse_image
 
 # ==================================================
 # CONFIG
@@ -20,7 +21,7 @@ from astropy_healpix import HEALPix
 warnings.filterwarnings("ignore", category=FITSFixedWarning)
 NSIDE = 128  # HEALPix resolution
 healpix_instance = HEALPix(nside=NSIDE, order='nested', frame='icrs')
-cfg_global = {}  # глобальная конфигурация на случай отсутствия координат в header
+cfg_global = {}  # глобальная конфигурация
 
 # ==================================================
 # WCS helpers
@@ -81,7 +82,7 @@ def compute_healpix(ra, dec):
 def compute_pixel_scale(header):
     try:
         wcs = WCS(header)
-        scales_deg = proj_plane_pixel_scales(wcs)  # градусы/пиксель
+        scales_deg = proj_plane_pixel_scales(wcs)
         scale_arcsec = np.mean(scales_deg) * 3600
         if scale_arcsec > 180:
             return np.mean(scales_deg)
@@ -94,13 +95,11 @@ def compute_pixel_scale(header):
 # ASTAP
 # ==================================================
 def solve_to_wcs(astap_path, fits_path):
-    if not os.path.exists(astap_path) or not os.path.exists(fits_path):
+    if not astap_path or not os.path.exists(astap_path) or not os.path.exists(fits_path):
         return False
     try:
-        subprocess.run(
-            [astap_path, "-f", fits_path, "-o", fits_path, "-update"],
-            capture_output=True, text=True, check=True
-        )
+        subprocess.run([astap_path, "-f", fits_path, "-o", fits_path, "-update"],
+                       capture_output=True, text=True, check=True)
         print(f"ASTAP solved WCS for {fits_path}")
         return True
     except Exception as e:
@@ -108,30 +107,39 @@ def solve_to_wcs(astap_path, fits_path):
         return False
 
 def run_astap_analysis(astap_path, fits_path):
+    if not astap_path:
+        return None, None
     try:
-        result = subprocess.run(
-            [astap_path, "-f", fits_path, "-analyse"],
-            capture_output=True, text=True, timeout=15
-        )
+        result = subprocess.run([astap_path, "-f", fits_path, "-analyse"],
+                                capture_output=True, text=True, timeout=15)
         hfd = re.search(r"HFD_MEDIAN\s*=\s*([\d\.]+)", result.stdout)
         stars = re.search(r"STARS\s*=\s*(\d+)", result.stdout)
-        return (
-            float(hfd.group(1)) if hfd else None,
-            int(stars.group(1)) if stars else None
-        )
+        return float(hfd.group(1)) if hfd else None, int(stars.group(1)) if stars else None
     except Exception as e:
         print(f"ASTAP analysis error for {fits_path}: {e}")
         return None, None
 
 # ==================================================
+# StarExtractor
+# ==================================================
+def run_starextractor(fits_path):
+    # try:
+    #     data = parse_image(fits_path)
+    #     fwhm = data.fwhm  # в пикселях
+        # sigma = data.sigma
+        # Для SNR можно использовать отношение fwhm/sigma как приближённый вариант,
+        # или добавить логику, если библиотека вернёт snr напрямую
+        # snr = data.snr
+        # getattr(data, "snr", None)
+    #     return fwhm, snr
+    # except Exception as e:
+    #     print(f"StarExtractor error for {fits_path}: {e}")
+    return None, None
+
+# ==================================================
 # Observer helpers
 # ==================================================
 def get_observer_location_from_header(header):
-    """
-    Берём координаты наблюдателя из FITS header.
-    Используем SITELAT, SITELONG, SITEALT.
-    Если нет — fallback на глобальный cfg.
-    """
     lat = header.get("SITELAT") or header.get("OBSLAT") or cfg_global.get("latitude", 0.0)
     lon = header.get("SITELONG") or header.get("OBSLONG") or cfg_global.get("longitude", 0.0)
     ele = header.get("SITEALT") or header.get("OBSALT") or cfg_global.get("elevation", 0.0)
@@ -200,6 +208,9 @@ def process_fits(astap_path, fits_path, conn, cur):
             # ASTAP analysis
             hfd, stars_count = run_astap_analysis(astap_path, fits_path)
 
+            # StarExtractor
+            fwhm_se, snr_se = run_starextractor(fits_path)
+
             # bounding box
             min_ra, max_ra, min_dec, max_dec = compute_bbox(polygon) if polygon else (None, None, None, None)
 
@@ -211,7 +222,7 @@ def process_fits(astap_path, fits_path, conn, cur):
             fov_width = fov_height = rotation = None
             try:
                 if pixel_scale is not None and "NAXIS1" in header and "NAXIS2" in header:
-                    fov_width = header["NAXIS1"] * pixel_scale / 3600  # deg
+                    fov_width = header["NAXIS1"] * pixel_scale / 3600
                     fov_height = header["NAXIS2"] * pixel_scale / 3600
                 if "CROTA2" in header:
                     rotation = header["CROTA2"]
@@ -230,6 +241,9 @@ def process_fits(astap_path, fits_path, conn, cur):
                 "polygon": polygon,
                 "hfd": hfd,
                 "stars": stars_count,
+                "stars_info": [],
+                "fwhm_starextractor": fwhm_se,
+                "snr_starextractor": snr_se,
                 "wcs_source": wcs_source,
                 "plate_solved": plate_solved,
                 "exptime": header.get("EXPTIME"),
@@ -264,7 +278,7 @@ def process_fits(astap_path, fits_path, conn, cur):
             with open(json_path, "w") as f:
                 json.dump(record, f, indent=2)
 
-            # DB
+            # DB insert
             cur.execute("""
                 INSERT OR REPLACE INTO fits_data (
                     file_name, file_path,
@@ -272,7 +286,8 @@ def process_fits(astap_path, fits_path, conn, cur):
                     healpix,
                     min_ra, max_ra, min_dec, max_dec,
                     fov_width, fov_height, pixel_scale, rotation,
-                    hfd, stars,
+                    hfd, stars, stars_info,
+                    fwhm_starextractor, snr_starextractor,
                     airmass, altitude, azimuth,
                     exptime, gain, offset, ccd_temp,
                     camera, telescope, filter,
@@ -281,14 +296,15 @@ def process_fits(astap_path, fits_path, conn, cur):
                     polygon,
                     moon_alt, moon_az,
                     sun_alt, sun_az
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 record["file_name"], record["file_path"],
                 record["ra"], record["dec"],
                 record["healpix"],
                 record["min_ra"], record["max_ra"], record["min_dec"], record["max_dec"],
                 record["fov_width"], record["fov_height"], record["pixel_scale"], record["rotation"],
-                record["hfd"], record["stars"],
+                record["hfd"], record["stars"], json.dumps(record["stars_info"]),
+                record["fwhm_starextractor"], record["snr_starextractor"],
                 record["airmass"], record["altitude"], record["azimuth"],
                 record["exptime"], record["gain"], record["offset"], record["ccd_temp"],
                 record["camera"], record["telescope"], record["filter"],
@@ -328,6 +344,9 @@ def init_db(db_path):
             rotation REAL,
             hfd REAL,
             stars INTEGER,
+            stars_info TEXT,
+            fwhm_starextractor REAL,
+            snr_starextractor REAL,
             airmass REAL,
             altitude REAL,
             azimuth REAL,
