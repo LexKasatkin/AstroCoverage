@@ -222,9 +222,30 @@ def process_fits(astap_path, fits_path, conn, cur):
                 fov_width = header["NAXIS1"] * pixel_scale / 3600
                 fov_height = header["NAXIS2"] * pixel_scale / 3600
 
-            moon_info, sun_info = compute_solar_moon(header)
+            # ============================
+            # координаты наблюдателя и время
+            # ============================
             observer = get_observer_location_from_header(header)
             date_loc = header.get("DATE-LOC") or get_date_loc(header)
+
+            # ============================
+            # вычисляем AltAz и airmass
+            # ============================
+            if ra is not None and dec is not None and "DATE-OBS" in header:
+                t_obs = Time(header["DATE-OBS"])
+                altaz_frame = AltAz(obstime=t_obs, location=observer)
+                target_coord = SkyCoord(ra=ra*u.deg, dec=dec*u.deg)
+                altaz = target_coord.transform_to(altaz_frame)
+                altitude = altaz.alt.deg
+                azimuth = altaz.az.deg
+                zenith_angle = 90 - altitude
+                airmass = 1 / np.cos(np.radians(zenith_angle)) if altitude > 0 else None
+            else:
+                altitude = header.get("CENTALT")
+                azimuth = header.get("CENTAZ")
+                airmass = header.get("AIRMASS")
+
+            moon_info, sun_info = compute_solar_moon(header)
 
             record = {
                 "file_name": os.path.basename(fits_path),
@@ -256,9 +277,9 @@ def process_fits(astap_path, fits_path, conn, cur):
                 "fov_width": fov_width,
                 "fov_height": fov_height,
                 "pixel_scale": pixel_scale,
-                "airmass": header.get("AIRMASS"),
-                "altitude": header.get("CENTALT"),
-                "azimuth": header.get("CENTAZ"),
+                "airmass": airmass,
+                "altitude": altitude,
+                "azimuth": azimuth,
                 "moon_alt": moon_info["alt"] if moon_info else None,
                 "moon_az": moon_info["az"] if moon_info else None,
                 "sun_alt": sun_info["alt"] if sun_info else None,
