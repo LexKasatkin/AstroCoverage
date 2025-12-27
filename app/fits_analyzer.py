@@ -79,17 +79,41 @@ def compute_healpix(ra, dec):
         return None
     return int(healpix_instance.skycoord_to_healpix(SkyCoord(ra=ra*u.deg, dec=dec*u.deg)))
 
-def compute_pixel_scale(header):
+def compute_pixel_scale(header, image_shape=None, polygon=None):
+    """
+    Вычисляет пиксельный масштаб в arcsec/pixel.
+    Сначала пытается через WCS, если выходит странное значение,
+    считает по FoV (если известен polygon или размеры изображения).
+    
+    :param header: FITS header
+    :param image_shape: (height, width) массива данных
+    :param polygon: [[ra, dec], ...] углы изображения
+    :return: pixel scale в arcsec/pixel или None
+    """
     try:
         wcs = WCS(header)
         scales_deg = proj_plane_pixel_scales(wcs)
         scale_arcsec = np.mean(scales_deg) * 3600
-        if scale_arcsec > 180:
-            return np.mean(scales_deg)
-        return scale_arcsec
-    except Exception as e:
-        print("Pixel scale error:", e)
-        return None
+        if 0 < scale_arcsec < 180:
+            return scale_arcsec
+    except Exception:
+        pass
+
+    # fallback: считаем по FoV и размеру изображения
+    if image_shape is not None:
+        h, w = image_shape
+        if polygon:
+            ras = [p[0] for p in polygon]
+            decs = [p[1] for p in polygon]
+            ra_span = max(ras) - min(ras)
+            dec_span = max(decs) - min(decs)
+        else:
+            # если полигона нет, используем примерный FoV 1 градус
+            ra_span = dec_span = 1.0
+        return (ra_span * 3600 / w + dec_span * 3600 / h) / 2
+
+    return None
+
 
 # ==================================================
 # ASTAP
@@ -226,7 +250,7 @@ def process_fits(astap_path, fits_path, conn, cur):
             healpix = compute_healpix(ra, dec)
 
             # FoV, pixel scale, rotation
-            pixel_scale = compute_pixel_scale(header)
+            pixel_scale = compute_pixel_scale(header, data.shape, polygon)
             fov_width = fov_height = rotation = None
             try:
                 if pixel_scale is not None and "NAXIS1" in header and "NAXIS2" in header:
