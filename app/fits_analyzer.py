@@ -9,58 +9,12 @@ import numpy as np
 
 from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
-from astropy.stats import mad_std
-from photutils.detection import DAOStarFinder
-from scipy.optimize import curve_fit
 
 # ==================================================
 # CONFIG
 # ==================================================
 
 warnings.filterwarnings("ignore", category=FITSFixedWarning)
-
-# ==================================================
-# FWHM
-# ==================================================
-
-def gaussian_2d(coords, amp, x0, y0, sx, sy, offset):
-    x, y = coords
-    return offset + amp * np.exp(
-        -(((x - x0) ** 2) / (2 * sx ** 2) + ((y - y0) ** 2) / (2 * sy ** 2))
-    ).ravel()
-
-
-def measure_fwhm(data, max_stars=50):
-    try:
-        sigma_bkg = mad_std(data)
-        finder = DAOStarFinder(fwhm=3.0, threshold=5 * sigma_bkg)
-        stars = finder(data)
-        if stars is None:
-            return None
-
-        fwhm_list = []
-        for s in stars[:max_stars]:
-            x, y = int(s["xcentroid"]), int(s["ycentroid"])
-            r = 7
-            cut = data[y-r:y+r+1, x-r:x+r+1]
-            if cut.shape != (2*r+1, 2*r+1):
-                continue
-
-            yy, xx = np.mgrid[:cut.shape[0], :cut.shape[1]]
-            p0 = (cut.max(), r, r, 2.0, 2.0, np.median(cut))
-
-            try:
-                popt, _ = curve_fit(gaussian_2d, (xx, yy), cut.ravel(), p0=p0, maxfev=2000)
-                sx, sy = popt[3], popt[4]
-                if sx > 0 and sy > 0:
-                    fwhm_list.append(2.355 * np.sqrt(sx * sy))
-            except:
-                continue
-
-        return np.median(fwhm_list) if fwhm_list else None
-    except:
-        return None
-
 
 # ==================================================
 # WCS helpers
@@ -208,16 +162,6 @@ def process_fits(astap_path, fits_path, conn, cur):
 
             hfd, stars_count = run_astap_analysis(astap_path, fits_path)
 
-            fwhm_px = measure_fwhm(data)
-            fwhm_arcsec = None
-            try:
-                if fwhm_px:
-                    w = WCS(header)
-                    px = np.sqrt((w.pixel_scale_matrix ** 2).sum(axis=0))
-                    fwhm_arcsec = float(fwhm_px * px.mean() * 3600)
-            except:
-                pass
-
             wcs_fields = extract_wcs_fields(wcs_header) if wcs_header else {}
 
             record = {
@@ -227,8 +171,6 @@ def process_fits(astap_path, fits_path, conn, cur):
                 "polygon": polygon,
                 "hfd": hfd,
                 "stars": stars_count,
-                "fwhm_px": fwhm_px,
-                "fwhm_arcsec": fwhm_arcsec,
                 "wcs_fields": wcs_fields,
                 "wcs_source": wcs_source,
                 "plate_solved": plate_solved,
@@ -253,19 +195,17 @@ def process_fits(astap_path, fits_path, conn, cur):
                 INSERT OR REPLACE INTO fits_data (
                     file_name, ra, dec, polygon,
                     hfd, stars,
-                    fwhm_px, fwhm_arcsec,
                     wcs_fields, wcs_source, plate_solved,
                     exptime, date_obs, date_loc,
                     instrument, camera, telescope,
                     ccd_temp, gain, offset,
                     header
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 record["file_name"],
                 record["ra"], record["dec"],
                 json.dumps(record["polygon"]),
                 record["hfd"], record["stars"],
-                record["fwhm_px"], record["fwhm_arcsec"],
                 json.dumps(record["wcs_fields"]),
                 record["wcs_source"], int(record["plate_solved"]),
                 record["exptime"], record["date_obs"], record["date_loc"],
@@ -287,7 +227,6 @@ def process_fits(astap_path, fits_path, conn, cur):
 
 def init_db(db_path):
     conn = sqlite3.connect(db_path)
-    # conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
 
     cur = conn.cursor()
@@ -300,8 +239,6 @@ def init_db(db_path):
             polygon TEXT,
             hfd REAL,
             stars INTEGER,
-            fwhm_px REAL,
-            fwhm_arcsec REAL,
             wcs_fields TEXT,
             wcs_source TEXT,
             plate_solved INTEGER,
