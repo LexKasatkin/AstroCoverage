@@ -163,6 +163,14 @@ def compute_solar_moon(header):
 def process_fits(astap_path, fits_path, conn, cur):
     json_path = fits_path + ".json"
     print("PROCESS:", fits_path)
+
+    # Проверка: если есть JSON и запись в БД, пропускаем
+    cur.execute("SELECT 1 FROM fits_data WHERE file_path = ?", (os.path.abspath(fits_path),))
+    db_exists = cur.fetchone() is not None
+    if os.path.exists(json_path) and db_exists:
+        print("  Already processed, skip")
+        return
+
     try:
         with fits.open(fits_path, ignore_missing_end=True) as hdul:
             data = hdul[0].data
@@ -318,6 +326,7 @@ def process_fits(astap_path, fits_path, conn, cur):
             print("OK:", fits_path)
     except Exception as e:
         print("ERROR:", fits_path, e)
+
 
 # ==================================================
 # DATABASE
