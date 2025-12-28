@@ -23,7 +23,8 @@ class FitsDatabase:
                 plate_solved INTEGER, wcs_source TEXT,
                 date_obs TEXT, date_loc TEXT,
                 latitude REAL, longitude REAL, elevation REAL,
-                polygon TEXT, moon_alt REAL, moon_az REAL, sun_alt REAL, sun_az REAL
+                polygon TEXT, moon_alt REAL, moon_az REAL,
+                sun_alt REAL, sun_az REAL, moon_phase REAL
             )
         """)
         self.conn.commit()
@@ -45,8 +46,9 @@ class FitsDatabase:
                 plate_solved, wcs_source,
                 date_obs, date_loc,
                 latitude, longitude, elevation,
-                polygon, moon_alt, moon_az, sun_alt, sun_az
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                polygon, moon_alt, moon_az,
+                sun_alt, sun_az, moon_phase
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             record["file_name"], record["file_path"], record["ra"], record["dec"], record["healpix"],
             record["min_ra"], record["max_ra"], record["min_dec"], record["max_dec"],
@@ -59,7 +61,7 @@ class FitsDatabase:
             record["date_obs"], record["date_loc"],
             record["latitude"], record["longitude"], record["elevation"],
             json.dumps(record["polygon"]), record["moon_alt"], record["moon_az"],
-            record["sun_alt"], record["sun_az"]
+            record["sun_alt"], record["sun_az"], record.get("moon_phase")
         ))
         self.conn.commit()
 

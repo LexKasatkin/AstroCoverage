@@ -87,6 +87,7 @@ class FitsAnalyzer:
 
                 # Moon & Sun
                 moon_info, sun_info = self.compute_solar_moon(header)
+                moon_phase= moon_info["phase"]
 
                 # Сбор record
                 record = {
@@ -107,7 +108,8 @@ class FitsAnalyzer:
                     "elevation": observer.height.value,
                     "polygon": polygon,
                     "moon_alt": moon_info["alt"], "moon_az": moon_info["az"],
-                    "sun_alt": sun_info["alt"], "sun_az": sun_info["az"]
+                    "sun_alt": sun_info["alt"], "sun_az": sun_info["az"],
+                    "moon_phase": moon_phase
                 }
 
             # Запись JSON
@@ -290,20 +292,40 @@ class FitsAnalyzer:
         return altitude, azimuth, airmass
 
     def compute_solar_moon(self, header):
-        if "DATE-OBS" not in header: return {"alt":None,"az":None}, {"alt":None,"az":None}
+        """
+        Возвращает координаты Луны и Солнца в данный момент наблюдения
+        и фазу Луны (0-1: 0 - новая, 0.5 - полная)
+        """
+        if "DATE-OBS" not in header:
+            return {"alt": None, "az": None, "phase": None}, {"alt": None, "az": None}
+
         t_obs = Time(header["DATE-OBS"])
         observer = self.get_observer_location(header)
         altaz_frame = AltAz(obstime=t_obs, location=observer)
-        moon_coord = get_body('moon', t_obs, location=observer).transform_to(altaz_frame)
-        sun_coord = get_body('sun', t_obs, location=observer).transform_to(altaz_frame)
-        return {"alt": moon_coord.alt.deg, "az": moon_coord.az.deg}, {"alt": sun_coord.alt.deg, "az": sun_coord.az.deg}
+
+        # Луна и Солнце в небесных координатах для расчета фазы
+        moon_icrs = get_body('moon', t_obs, location=observer)
+        sun_icrs = get_body('sun', t_obs, location=observer)
+
+        # Луна и Солнце в горизонте для координат alt/az
+        moon_altaz = moon_icrs.transform_to(altaz_frame)
+        sun_altaz = sun_icrs.transform_to(altaz_frame)
+
+        # Фаза Луны (0-1)
+        elongation = moon_icrs.separation(sun_icrs)  # угол Луна-Солнце
+        moon_phase = (1 + np.cos(elongation.rad)) / 2  # 0 - новолуние, 1 - полнолуние
+
+        moon_info = {"alt": moon_altaz.alt.deg, "az": moon_altaz.az.deg, "phase": moon_phase}
+        sun_info = {"alt": sun_altaz.alt.deg, "az": sun_altaz.az.deg}
+
+        return moon_info, sun_info
 
     def solve_to_wcs(self, fits_path):
         if not self.astap_path or not os.path.exists(self.astap_path) or not os.path.exists(fits_path):
             return False
         try:
             subprocess.run([self.astap_path, "-f", fits_path, "-o", fits_path],
-                           capture_output=True, text=True, check=True, timeout=60)
+                            capture_output=True, text=True, check=True, timeout=60)
             return True
         except:
             return False
@@ -319,4 +341,3 @@ class FitsAnalyzer:
             return float(hfd.group(1)) if hfd else None, int(stars.group(1)) if stars else None
         except:
             return None, None
-    
