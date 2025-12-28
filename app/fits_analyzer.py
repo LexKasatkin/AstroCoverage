@@ -1,3 +1,4 @@
+import os
 import json
 import numpy as np
 from astropy.io import fits
