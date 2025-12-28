@@ -13,12 +13,39 @@ from astropy.time import Time
 import astropy.units as u
 from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy_healpix import HEALPix
+import sep 
 
 warnings.filterwarnings("ignore", category=FITSFixedWarning)
 
 NSIDE = 128
 healpix_instance = HEALPix(nside=NSIDE, order='nested', frame='icrs')
 cfg_global = {}
+
+# ============================
+# Utils
+# ============================
+def compute_fwhm_arcsec(fwhm_px, pixel_scale):
+    if fwhm_px is None or pixel_scale is None:
+        return None
+    return fwhm_px * pixel_scale
+
+def compute_fwhm_sep(image, pixel_scale=None):
+    try:
+        img = np.array(image, dtype=np.float32)
+        bkg = sep.Background(img)
+        data_sub = img - bkg
+        objects = sep.extract(data_sub, thresh=3.0*bkg.globalrms)
+        if len(objects) == 0:
+            return None, None
+        a = objects['a']
+        b = objects['b']
+        sigmas = 0.5 * (a + b)
+        fwhm_px = float(np.median(sigmas) * 2.355)
+        fwhm_arcsec = fwhm_px * pixel_scale if pixel_scale else None
+        return fwhm_px, fwhm_arcsec
+    except Exception as e:
+        print("FWHM SEP error:", e)
+        return None, None
 
 # ============================
 # WCS helpers
@@ -39,8 +66,6 @@ def read_polygon_from_wcs_file(wcs_path, image_shape):
     try:
         wcs = WCS(header)
         h, w = image_shape
-        if h == 0 or w == 0:
-            return None, None
         pix = [(0, 0), (w, 0), (w, h), (0, h)]
         world = wcs.all_pix2world(pix, 0)
         polygon = [[float(x), float(y)] for x, y in world]
@@ -50,8 +75,6 @@ def read_polygon_from_wcs_file(wcs_path, image_shape):
 
 def compute_polygon_safe(header, image_shape):
     try:
-        if image_shape is None or image_shape[0] == 0 or image_shape[1] == 0:
-            return None
         wcs = WCS(header)
         h, w = image_shape
         pix = [(0, 0), (w, 0), (w, h), (0, h)]
@@ -94,7 +117,6 @@ def compute_pixel_scale(header, image_shape=None, polygon=None):
             return scale_arcsec
     except:
         pass
-
     if image_shape:
         h, w = image_shape
         if polygon:
@@ -104,7 +126,7 @@ def compute_pixel_scale(header, image_shape=None, polygon=None):
             dec_span = max(decs) - min(decs)
         else:
             ra_span = dec_span = 1.0
-        return (ra_span * 3600 / w + dec_span * 3600 / h) / 2
+        return (ra_span*3600/w + dec_span*3600/h)/2
     return None
 
 # ============================
@@ -158,21 +180,19 @@ def compute_solar_moon(header):
     altaz_frame = AltAz(obstime=t_obs, location=observer)
     moon_coord = get_body('moon', t_obs, location=observer).transform_to(altaz_frame)
     sun_coord = get_body('sun', t_obs, location=observer).transform_to(altaz_frame)
-    moon_info = {"alt": moon_coord.alt.deg, "az": moon_coord.az.deg}
-    sun_info = {"alt": sun_coord.alt.deg, "az": sun_coord.az.deg}
-    return moon_info, sun_info
+    return (
+        {"alt": moon_coord.alt.deg, "az": moon_coord.az.deg},
+        {"alt": sun_coord.alt.deg, "az": sun_coord.az.deg}
+    )
 
 # ============================
-# Main processing
+# MAIN
 # ============================
 def process_fits(astap_path, fits_path, conn, cur):
     json_path = fits_path + ".json"
-
     cur.execute("SELECT 1 FROM fits_data WHERE file_path = ?", (os.path.abspath(fits_path),))
-    db_exists = cur.fetchone() is not None
-    if os.path.exists(json_path) and db_exists:
+    if cur.fetchone():
         return
-
     try:
         with fits.open(fits_path, ignore_missing_end=True) as hdul:
             data = hdul[0].data
@@ -198,48 +218,44 @@ def process_fits(astap_path, fits_path, conn, cur):
             plate_solved = False
             wcs_path = os.path.splitext(fits_path)[0] + ".wcs"
             polygon, wcs_header = read_polygon_from_wcs_file(wcs_path, data.shape)
+
             if polygon:
                 wcs_source = "WCS_FILE"
                 plate_solved = True
-            if polygon is None and astap_path:
-                if solve_to_wcs(astap_path, fits_path):
-                    polygon, wcs_header = read_polygon_from_wcs_file(wcs_path, data.shape)
-                    if polygon:
-                        wcs_source = "ASTAP"
-                        plate_solved = True
-            if polygon is None:
+            elif astap_path and solve_to_wcs(astap_path, fits_path):
+                polygon, wcs_header = read_polygon_from_wcs_file(wcs_path, data.shape)
+                if polygon:
+                    wcs_source = "ASTAP"
+                    plate_solved = True
+            else:
                 polygon = compute_polygon_from_header(header, data.shape)
                 wcs_header = header
                 wcs_source = "FITS"
 
             hfd, stars_count = run_astap_analysis(astap_path, fits_path)
 
+            pixel_scale = compute_pixel_scale(header, data.shape, polygon)
+            fwhm_px, fwhm_arcsec = compute_fwhm_sep(data, pixel_scale)
+
             min_ra, max_ra, min_dec, max_dec = compute_bbox(polygon) if polygon else (None, None, None, None)
             healpix = compute_healpix(ra, dec)
-            pixel_scale = compute_pixel_scale(header, data.shape, polygon)
+
             fov_width = fov_height = None
             if pixel_scale and "NAXIS1" in header and "NAXIS2" in header:
                 fov_width = header["NAXIS1"] * pixel_scale / 3600
                 fov_height = header["NAXIS2"] * pixel_scale / 3600
 
-            # ============================
-            # координаты наблюдателя и время
-            # ============================
             observer = get_observer_location_from_header(header)
             date_loc = header.get("DATE-LOC") or get_date_loc(header)
 
-            # ============================
-            # вычисляем AltAz и airmass
-            # ============================
             if ra is not None and dec is not None and "DATE-OBS" in header:
                 t_obs = Time(header["DATE-OBS"])
-                altaz_frame = AltAz(obstime=t_obs, location=observer)
-                target_coord = SkyCoord(ra=ra*u.deg, dec=dec*u.deg)
-                altaz = target_coord.transform_to(altaz_frame)
+                altaz = SkyCoord(ra=ra*u.deg, dec=dec*u.deg).transform_to(
+                    AltAz(obstime=t_obs, location=observer)
+                )
                 altitude = altaz.alt.deg
                 azimuth = altaz.az.deg
-                zenith_angle = 90 - altitude
-                airmass = 1 / np.cos(np.radians(zenith_angle)) if altitude > 0 else None
+                airmass = 1 / np.cos(np.radians(90 - altitude)) if altitude > 0 else None
             else:
                 altitude = header.get("CENTALT")
                 azimuth = header.get("CENTAZ")
@@ -252,34 +268,36 @@ def process_fits(astap_path, fits_path, conn, cur):
                 "file_path": os.path.abspath(fits_path),
                 "ra": ra,
                 "dec": dec,
-                "polygon": polygon,
-                "hfd": hfd,
-                "stars": stars_count,
-                "wcs_source": wcs_source,
-                "plate_solved": plate_solved,
-                "exptime": header.get("EXPTIME"),
-                "date_obs": header.get("DATE-OBS"),
-                "date_loc": date_loc,
-                "camera": header.get("CAMERAID") or header.get("INSTRUME"),
-                "telescope": header.get("TELESCOP"),
-                "filter": header.get("FILTER"),
-                "ccd_temp": header.get("CCD-TEMP"),
-                "gain": header.get("GAIN"),
-                "offset": header.get("OFFSET"),
-                "latitude": observer.lat.deg,
-                "longitude": observer.lon.deg,
-                "elevation": observer.height.value,
+                "healpix": healpix,
                 "min_ra": min_ra,
                 "max_ra": max_ra,
                 "min_dec": min_dec,
                 "max_dec": max_dec,
-                "healpix": healpix,
                 "fov_width": fov_width,
                 "fov_height": fov_height,
                 "pixel_scale": pixel_scale,
+                "hfd": hfd,
+                "fwhm_px": fwhm_px,
+                "fwhm_arcsec": fwhm_arcsec,
+                "stars": stars_count,
                 "airmass": airmass,
                 "altitude": altitude,
                 "azimuth": azimuth,
+                "exptime": header.get("EXPTIME"),
+                "gain": header.get("GAIN"),
+                "offset": header.get("OFFSET"),
+                "ccd_temp": header.get("CCD-TEMP"),
+                "camera": header.get("CAMERAID") or header.get("INSTRUME"),
+                "telescope": header.get("TELESCOP"),
+                "filter": header.get("FILTER"),
+                "plate_solved": plate_solved,
+                "wcs_source": wcs_source,
+                "date_obs": header.get("DATE-OBS"),
+                "date_loc": date_loc,
+                "latitude": observer.lat.deg,
+                "longitude": observer.lon.deg,
+                "elevation": observer.height.value,
+                "polygon": polygon,
                 "moon_alt": moon_info["alt"] if moon_info else None,
                 "moon_az": moon_info["az"] if moon_info else None,
                 "sun_alt": sun_info["alt"] if sun_info else None,
@@ -292,11 +310,10 @@ def process_fits(astap_path, fits_path, conn, cur):
             cur.execute("""
                 INSERT OR REPLACE INTO fits_data (
                     file_name, file_path,
-                    ra, dec,
-                    healpix,
+                    ra, dec, healpix,
                     min_ra, max_ra, min_dec, max_dec,
                     fov_width, fov_height, pixel_scale,
-                    hfd, stars,
+                    hfd, fwhm_px, fwhm_arcsec, stars,
                     airmass, altitude, azimuth,
                     exptime, gain, offset, ccd_temp,
                     camera, telescope, filter,
@@ -306,14 +323,13 @@ def process_fits(astap_path, fits_path, conn, cur):
                     polygon,
                     moon_alt, moon_az,
                     sun_alt, sun_az
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 record["file_name"], record["file_path"],
-                record["ra"], record["dec"],
-                record["healpix"],
+                record["ra"], record["dec"], record["healpix"],
                 record["min_ra"], record["max_ra"], record["min_dec"], record["max_dec"],
                 record["fov_width"], record["fov_height"], record["pixel_scale"],
-                record["hfd"], record["stars"],
+                record["hfd"], record["fwhm_px"], record["fwhm_arcsec"], record["stars"],
                 record["airmass"], record["altitude"], record["azimuth"],
                 record["exptime"], record["gain"], record["offset"], record["ccd_temp"],
                 record["camera"], record["telescope"], record["filter"],
@@ -324,16 +340,17 @@ def process_fits(astap_path, fits_path, conn, cur):
                 record["moon_alt"], record["moon_az"],
                 record["sun_alt"], record["sun_az"]
             ))
+
             conn.commit()
+
     except Exception as e:
         print("ERROR:", fits_path, e)
 
 # ============================
-# Database initialization
+# DB INIT
 # ============================
 def init_db(db_path):
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA synchronous=NORMAL;")
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS fits_data (
@@ -351,6 +368,8 @@ def init_db(db_path):
             fov_height REAL,
             pixel_scale REAL,
             hfd REAL,
+            fwhm_px REAL,
+            fwhm_arcsec REAL,
             stars INTEGER,
             airmass REAL,
             altitude REAL,
@@ -380,25 +399,30 @@ def init_db(db_path):
     return conn, cur
 
 # ============================
-# Entry point
+# ENTRY
 # ============================
 def generate_database(config_path, db_path):
     global cfg_global
     with open(config_path) as f:
         cfg_global = json.load(f)
+
     astap_path = cfg_global.get("astap_path")
     conn, cur = init_db(db_path)
+
     for scope in cfg_global.get("telescopes", []):
         fits_dir = scope.get("fits_dir")
         if not fits_dir or not os.path.exists(fits_dir):
             continue
+
         for date_folder in sorted(os.listdir(fits_dir)):
             date_path = os.path.join(fits_dir, date_folder)
             if not os.path.isdir(date_path):
                 continue
+
             for name in sorted(os.listdir(date_path)):
                 if name.lower().endswith((".fits", ".fit", ".fts")):
                     process_fits(astap_path, os.path.join(date_path, name), conn, cur)
+
     conn.close()
     print("DATABASE READY:", db_path)
 
