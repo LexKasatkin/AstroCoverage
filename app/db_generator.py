@@ -1,9 +1,11 @@
 import os
 import sys
 import json
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from fits_db import FitsDatabase
 from fits_analyzer import FitsAnalyzer
+import psutil  # чтобы узнать доступную память
 
 # ============================
 # Обёртка для ProcessPoolExecutor
@@ -14,9 +16,29 @@ def process_single_fits(args):
     return analyzer.process_file(fits_path, skip_db)
 
 # ============================
+# Функция для подсчёта подходящего числа потоков
+# ============================
+def suggest_max_workers(fits_files, mem_per_proc_gb=2):
+    """
+    fits_files: список путей к FITS
+    mem_per_proc_gb: предполагаемое потребление памяти на один процесс
+    """
+    # Получаем доступную RAM
+    available_mem_gb = psutil.virtual_memory().available / (1024**3)
+    
+    # Считаем, сколько процессов безопасно запустить
+    max_by_mem = max(1, int(available_mem_gb // mem_per_proc_gb))
+    max_by_cpu = os.cpu_count() or 2
+    
+    # Выбираем минимальное из CPU и памяти
+    return min(max_by_mem, max_by_cpu)
+
+# ============================
 # Генерация БД из FITS файлов
 # ============================
 def generate_database(config_path, db_path):
+    start_time = time.perf_counter()
+
     # Загрузка конфигурации
     with open(config_path) as f:
         cfg_global = json.load(f)
@@ -35,6 +57,8 @@ def generate_database(config_path, db_path):
                 if f.lower().endswith((".fits", ".fit", ".fts")):
                     fits_files.append(os.path.join(dp, f))
 
+    print(f"Found {len(fits_files)} FITS files")
+
     # Определяем, какие файлы нужно обработать
     files_to_process = []
     skip_db_flags = {}
@@ -42,37 +66,65 @@ def generate_database(config_path, db_path):
         json_path = os.path.splitext(f)[0] + ".json"
         in_db = db.check_record_exists(os.path.abspath(f))
         in_json = os.path.exists(json_path)
+
         if in_db and in_json:
             print(f"Skipping {f} (already in DB and JSON exists)")
             continue
+
         files_to_process.append(f)
         skip_db_flags[f] = in_db
 
+    total = len(files_to_process)
+    print(f"Processing {total} files...")
+
+    processed = 0
+    inserted = 0
+
+      # Подбираем оптимальное количество процессов
+    max_workers = suggest_max_workers(files_to_process, mem_per_proc_gb=2)
+    print(f"Using max_workers={max_workers} for parallel processing")
+
     # Параллельная обработка
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(process_single_fits, (f, astap_path, cfg_global, skip_db_flags[f])): f
             for f in files_to_process
         }
 
-        total = len(futures)
         for i, fut in enumerate(as_completed(futures), 1):
+            fpath = futures[fut]
             try:
                 record = fut.result()
             except Exception as e:
-                print(f"ERROR processing {futures[fut]}:", e)
+                print(f"ERROR processing {fpath}: {e}")
                 continue
+
+            processed += 1
+
             if not record:
                 continue
 
             record_id = db.insert_record(record)
             if record_id:
-                print(f"[{i}/{total}] Record inserted: {record['file_name']} (ID={record_id})")
+                inserted += 1
+                print(f"[{i}/{total}] Inserted: {record['file_name']} (ID={record_id})")
             else:
-                print(f"[{i}/{total}] WARNING: Failed to insert record: {record['file_name']}")
+                print(f"[{i}/{total}] WARNING: Failed to insert {record['file_name']}")
 
     db.close()
-    print("DATABASE READY:", db_path)
+
+    elapsed = time.perf_counter() - start_time
+
+    print("\n==============================")
+    print("DATABASE GENERATION FINISHED")
+    print("==============================")
+    print(f"Total FITS found     : {len(fits_files)}")
+    print(f"Processed            : {processed}")
+    print(f"Inserted into DB     : {inserted}")
+    print(f"Elapsed time         : {elapsed:.2f} sec")
+    if processed > 0:
+        print(f"Average per file     : {elapsed / processed:.2f} sec")
+    print("==============================")
 
 # ============================
 # ENTRY POINT

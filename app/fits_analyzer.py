@@ -12,6 +12,8 @@ import re
 from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy_healpix import HEALPix
 import warnings
+from photutils.detection import DAOStarFinder
+from photutils.psf import fit_fwhm
 
 warnings.filterwarnings("ignore", category=FITSFixedWarning)
 
@@ -140,22 +142,114 @@ class FitsAnalyzer:
         if "bias" in name or "offset" in name: return "BIAS"
         return "LIGHT"
 
-    def compute_fwhm(self, data, pixel_scale=None):
+    def compute_fwhm_photutils(self, data, pixel_scale=None):
         try:
-            img = np.array(data, dtype=np.float32)
+            data = np.asarray(data, dtype=np.float32)
+
+            # Фон
+            bkg = sep.Background(data)
+            data_sub = data - bkg.back()
+
+            # Поиск звезд
+            finder = DAOStarFinder(
+                threshold=4.0 * bkg.globalrms,
+                fwhm=4.0,
+                sharplo=0.2,
+                sharphi=1.0,
+                roundlo=-1.0,
+                roundhi=1.0
+            )
+
+            stars = finder(data_sub)
+            if stars is None or len(stars) < 5:
+                return None, None
+
+            # Координаты звезд
+            xy = list(zip(stars["xcentroid"], stars["ycentroid"]))
+
+            # PSF fit
+            fwhm_values = fit_fwhm(
+                data_sub,
+                xypos=xy,
+                fwhm=4.0,
+                fit_shape=(9, 9)
+            )
+
+            # Очистка мусора
+            fwhm_values = np.array(fwhm_values)
+            fwhm_values = fwhm_values[np.isfinite(fwhm_values)]
+            fwhm_values = fwhm_values[(fwhm_values > 1.0) & (fwhm_values < 15.0)]
+
+            if len(fwhm_values) == 0:
+                return None, None
+
+            fwhm_px = float(np.median(fwhm_values))
+            fwhm_arcsec = fwhm_px * pixel_scale if pixel_scale else None
+
+            return fwhm_px, fwhm_arcsec
+
+        except Exception as e:
+            print("FWHM error:", e)
+            return None, None
+
+
+    def compute_fwhm(self, data, pixel_scale=None):
+        """
+        Улучшенный расчет FWHM:
+        - фильтрация по эллиптичности
+        - исключение краёв кадра
+        - защита от шумов и пересветов
+        - медианное значение (устойчиво к выбросам)
+        """
+
+        try:
+            img = np.asarray(data, dtype=np.float32)
+
+            # Фон
             bkg = sep.Background(img)
             data_sub = img - bkg.back()
-            objects = sep.extract(data_sub, thresh=8.0*bkg.globalrms)
-            if len(objects) == 0: return None, None
-            a, b = objects['a'], objects['b']
-            valid = (a>0) & (b>0)
-            if not np.any(valid): return None, None
-            sigmas = 0.5*(a[valid]+b[valid])
-            fwhm_px = float(np.median(sigmas)*2.355)
-            fwhm_arcsec = fwhm_px*pixel_scale if pixel_scale else None
+
+            # Детекция объектов
+            thresh = 3.0 * bkg.globalrms
+            objects = sep.extract(data_sub, thresh=thresh)
+
+            if len(objects) == 0:
+                return None, None
+
+            h, w = img.shape
+
+            # Параметры объектов
+            a = objects['a']
+            b = objects['b']
+            x = objects['x']
+            y = objects['y']
+
+            # Эллиптичность
+            ellipticity = 1.0 - (b / a)
+
+            # Фильтрация
+            mask = (
+                (a > 1.2) & (a < 8.0) &               # разумный размер звезды
+                (ellipticity < 0.4) &                # не вытянутые
+                (x > 0.1 * w) & (x < 0.9 * w) &       # не у краёв
+                (y > 0.1 * h) & (y < 0.9 * h)
+            )
+
+            if not np.any(mask):
+                return None, None
+
+            # FWHM в пикселях
+            sigmas = 0.5 * (a[mask] + b[mask])
+            fwhm_px = float(np.median(sigmas) * 2.355)
+
+            # Перевод в arcsec
+            fwhm_arcsec = fwhm_px * pixel_scale if pixel_scale else None
+
             return fwhm_px, fwhm_arcsec
-        except:
+
+        except Exception:
             return None, None
+
 
     def compute_pixel_scale(self, header, image_shape=None, polygon=None):
         try:
