@@ -61,7 +61,7 @@ class FitsAnalyzer:
 
                 # Pixel scale и FWHM
                 pixel_scale = self.compute_pixel_scale(header, data.shape)
-                fwhm_px, fwhm_arcsec = self.compute_fwhm(data, pixel_scale)
+                fwhm_px, fwhm_arcsec, snr_median = self.compute_fwhm(data, pixel_scale)
 
                 # RA / DEC
                 ra, dec = self.get_radec(header)
@@ -99,7 +99,8 @@ class FitsAnalyzer:
                     "ra": ra, "dec": dec, "healpix": healpix,
                     "min_ra": min_ra, "max_ra": max_ra, "min_dec": min_dec, "max_dec": max_dec,
                     "fov_width": fov_width, "fov_height": fov_height, "pixel_scale": pixel_scale,
-                    "hfd": hfd, "hfd_arcsec": hfd_arcsec, "fwhm_px": fwhm_px, "fwhm_arcsec": fwhm_arcsec, "stars": stars,
+                    "hfd": hfd, "hfd_arcsec": hfd_arcsec, "snr_median": snr_median,
+                    "fwhm_px": fwhm_px, "fwhm_arcsec": fwhm_arcsec, "stars": stars,
                     "airmass": airmass, "altitude": altitude, "azimuth": azimuth,
                     "exptime": header.get("EXPTIME"), "gain": header.get("GAIN"),
                     "offset": header.get("OFFSET"), "ccd_temp": header.get("CCD-TEMP"),
@@ -193,14 +194,14 @@ class FitsAnalyzer:
             print("FWHM error:", e)
             return None, None
 
-
-    def compute_fwhm(self, data, pixel_scale=None):
+    def compute_fwhm(self, data, pixel_scale=None, snr_threshold=5.0):
         """
-        Улучшенный расчет FWHM:
+        Расчет FWHM и апертурного SNR, близкого к PixInsight:
         - фильтрация по эллиптичности
         - исключение краёв кадра
         - защита от шумов и пересветов
         - медианное значение (устойчиво к выбросам)
+        - фильтрация по SNR
         """
 
         try:
@@ -209,47 +210,67 @@ class FitsAnalyzer:
             # Фон
             bkg = sep.Background(img)
             data_sub = img - bkg.back()
+            rms = bkg.globalrms
 
             # Детекция объектов
-            thresh = 3.0 * bkg.globalrms
+            thresh = 3.0 * rms
             objects = sep.extract(data_sub, thresh=thresh)
 
             if len(objects) == 0:
-                return None, None
+                return None, None, None
 
             h, w = img.shape
 
             # Параметры объектов
-            a = objects['a']
+            a = objects['a']   # полуоси
             b = objects['b']
             x = objects['x']
             y = objects['y']
+            flux = objects['flux']
 
             # Эллиптичность
             ellipticity = 1.0 - (b / a)
 
-            # Фильтрация
+            # Начальная фильтрация
             mask = (
-                (a > 1.2) & (a < 8.0) &               # разумный размер звезды
-                (ellipticity < 0.4) &                # не вытянутые
-                (x > 0.1 * w) & (x < 0.9 * w) &       # не у краёв
+                (a > 1.2) & (a < 8.0) & 
+                (ellipticity < 0.4) &
+                (x > 0.1 * w) & (x < 0.9 * w) &
                 (y > 0.1 * h) & (y < 0.9 * h)
             )
 
             if not np.any(mask):
-                return None, None
+                return None, None, None
 
-            # FWHM в пикселях
+            # Апертурный SNR с учетом FWHM
             sigmas = 0.5 * (a[mask] + b[mask])
-            fwhm_px = float(np.median(sigmas) * 2.355)
+            fwhm_px_est = sigmas * 2.355
+            # радиус апертуры ≈ FWHM / 2
+            r_ap = fwhm_px_est / 2
+            npix = np.pi * r_ap**2
 
-            # Перевод в arcsec
+            snr_aperture = flux[mask] / (np.sqrt(npix) * rms)
+            snr_mask = snr_aperture > snr_threshold
+
+            if not np.any(snr_mask):
+                return None, None, None
+
+            # Финальная маска
+            final_mask = np.zeros_like(mask, dtype=bool)
+            final_mask[np.where(mask)[0][snr_mask]] = True
+
+            # Медианный FWHM
+            fwhm_px = float(np.median(sigmas[snr_mask]) * 2.355)
             fwhm_arcsec = fwhm_px * pixel_scale if pixel_scale else None
 
-            return fwhm_px, fwhm_arcsec
+            # Медианный SNR
+            snr_median = float(np.median(snr_aperture[snr_mask]))
 
-        except Exception:
-            return None, None
+            return fwhm_px, fwhm_arcsec, snr_median
+
+        except Exception as e:
+            print("FWHM computation error:", e)
+            return None, None, None
 
 
     def compute_pixel_scale(self, header, image_shape=None, polygon=None):
