@@ -71,6 +71,7 @@ class FitsAnalyzer:
 
                 # ASTAP анализ (HFD, STARS)
                 hfd, stars = self.run_astap_analysis(fits_path)
+                hfd_arcsec = hfd * pixel_scale if hfd and pixel_scale else None
 
                 # BBox & Healpix
                 min_ra, max_ra, min_dec, max_dec = self.compute_bbox(polygon) if polygon else (None, None, None, None)
@@ -98,7 +99,7 @@ class FitsAnalyzer:
                     "ra": ra, "dec": dec, "healpix": healpix,
                     "min_ra": min_ra, "max_ra": max_ra, "min_dec": min_dec, "max_dec": max_dec,
                     "fov_width": fov_width, "fov_height": fov_height, "pixel_scale": pixel_scale,
-                    "hfd": hfd, "fwhm_px": fwhm_px, "fwhm_arcsec": fwhm_arcsec, "stars": stars,
+                    "hfd": hfd, "hfd_arcsec": hfd_arcsec, "fwhm_px": fwhm_px, "fwhm_arcsec": fwhm_arcsec, "stars": stars,
                     "airmass": airmass, "altitude": altitude, "azimuth": azimuth,
                     "exptime": header.get("EXPTIME"), "gain": header.get("GAIN"),
                     "offset": header.get("OFFSET"), "ccd_temp": header.get("CCD-TEMP"),
