@@ -63,6 +63,15 @@ class FitsAnalyzer:
                 pixel_scale = self.compute_pixel_scale(header, data.shape)
                 fwhm_px, fwhm_arcsec, snr_median = self.compute_fwhm(data, pixel_scale)
 
+                # sky brightness / sky backgroud / sky rms
+                sky_brightness, sky_background, sky_rms = self.compute_sky_brightness(
+                    data,
+                    pixel_scale=pixel_scale,
+                    gain=header.get("GAIN"),
+                    exposure=header.get("EXPTIME")
+                )
+                bortle_float, bortle_class = self.estimate_bortle(sky_brightness)
+                
                 # RA / DEC
                 ra, dec = self.get_radec(header)
 
@@ -100,6 +109,8 @@ class FitsAnalyzer:
                     "min_ra": min_ra, "max_ra": max_ra, "min_dec": min_dec, "max_dec": max_dec,
                     "fov_width": fov_width, "fov_height": fov_height, "pixel_scale": pixel_scale,
                     "hfd": hfd, "hfd_arcsec": hfd_arcsec, "snr_median": snr_median,
+                    "sky_background": sky_background, "sky_rms": sky_rms, "sky_brightness": sky_brightness,
+                    "bortle": bortle_class, "bortle_float": bortle_float,
                     "fwhm_px": fwhm_px, "fwhm_arcsec": fwhm_arcsec, "stars": stars,
                     "airmass": airmass, "altitude": altitude, "azimuth": azimuth,
                     "exptime": header.get("EXPTIME"), "gain": header.get("GAIN"),
@@ -293,6 +304,72 @@ class FitsAnalyzer:
                 ra_span = dec_span = 1.0
             return (ra_span*3600/w + dec_span*3600/h)/2
         return None
+    
+    # ==========================================================
+    # SKY BRIGHTNESS
+    # ==========================================================
+    def compute_sky_brightness(self, data, pixel_scale, gain, exposure, zeropoint=21.5):
+        try:
+            bkg = sep.Background(data)
+            sky_adu = np.median(bkg.back())
+            sky_rms = bkg.globalrms
+
+            if pixel_scale is None or gain is None or exposure is None:
+                return None, sky_adu, sky_rms
+
+            sky_e = sky_adu * gain
+            sky_flux = sky_e / (exposure * pixel_scale ** 2)
+
+            if sky_flux <= 0:
+                return None, sky_adu, sky_rms
+
+            sky_mag = zeropoint - 2.5 * np.log10(sky_flux)
+
+            return sky_mag, sky_adu, sky_rms
+
+        except Exception as e:
+            print("Sky brightness error:", e)
+            return None, None, None
+        
+    def estimate_bortle(self, sky_brightness):
+        """
+        Estimate Bortle class from sky brightness (mag/arcsec^2)
+        Returns:
+            bortle_float, bortle_int
+        """
+        if sky_brightness is None:
+            return None, None
+
+        table = [
+            (22.0, 1),
+            (21.7, 2),
+            (21.3, 3),
+            (20.8, 4),
+            (20.3, 5),
+            (19.8, 6),
+            (19.1, 7),
+            (18.5, 8),
+            (17.5, 9),
+        ]
+
+        # brighter sky → higher bortle
+        for i in range(len(table) - 1):
+            m1, b1 = table[i]
+            m2, b2 = table[i + 1]
+
+            if m1 >= sky_brightness >= m2:
+                # linear interpolation
+                t = (m1 - sky_brightness) / (m1 - m2)
+                bortle = b1 + t * (b2 - b1)
+                return round(bortle, 2), int(round(bortle))
+
+        if sky_brightness > 22.0:
+            return 1.0, 1
+        if sky_brightness < 17.5:
+            return 9.0, 9
+
+        return None, None
+
 
     def get_radec(self, header):
         ra = dec = None

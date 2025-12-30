@@ -25,7 +25,9 @@ class FitsDatabase:
                 date_obs TEXT, date_loc TEXT,
                 latitude REAL, longitude REAL, elevation REAL,
                 polygon TEXT, moon_alt REAL, moon_az REAL,
-                sun_alt REAL, sun_az REAL, moon_phase REAL
+                sun_alt REAL, sun_az REAL, moon_phase REAL,
+                sky_background REAL, sky_rms REAL, sky_brightness REAL,
+                bortle INTEGER, bortle_float REAL
             )
         """)
         self.conn.commit()
@@ -48,8 +50,10 @@ class FitsDatabase:
                 date_obs, date_loc,
                 latitude, longitude, elevation,
                 polygon, moon_alt, moon_az,
-                sun_alt, sun_az, moon_phase
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                sun_alt, sun_az, moon_phase,
+                sky_background, sky_rms, sky_brightness,
+                bortle, bortle_float
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             record["file_name"], record["file_path"], record["ra"], record["dec"], record["healpix"],
             record["min_ra"], record["max_ra"], record["min_dec"], record["max_dec"],
@@ -62,7 +66,9 @@ class FitsDatabase:
             record["date_obs"], record["date_loc"],
             record["latitude"], record["longitude"], record["elevation"],
             json.dumps(record["polygon"]), record["moon_alt"], record["moon_az"],
-            record["sun_alt"], record["sun_az"], record.get("moon_phase")
+            record["sun_alt"], record["sun_az"], record.get("moon_phase"),
+            record["sky_background"], record["sky_rms"], record["sky_brightness"],
+            record["bortle"], record["bortle_float"]
         ))
         self.conn.commit()
 
