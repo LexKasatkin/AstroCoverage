@@ -16,7 +16,7 @@ class FitsDatabase:
                 ra REAL, dec REAL, healpix INTEGER,
                 min_ra REAL, max_ra REAL, min_dec REAL, max_dec REAL,
                 fov_width REAL, fov_height REAL, pixel_scale REAL,
-                hfd REAL, hfd_arcsec REAL, snr_median REAL, 
+                hfd REAL, hfd_arcsec REAL, snr_median REAL, sky_snr REAL,
                 fwhm_px REAL, fwhm_arcsec REAL, stars INTEGER,
                 airmass REAL, altitude REAL, azimuth REAL,
                 exptime REAL, gain REAL, offset REAL, ccd_temp REAL,
@@ -42,7 +42,8 @@ class FitsDatabase:
                 file_name, file_path, ra, dec, healpix,
                 min_ra, max_ra, min_dec, max_dec,
                 fov_width, fov_height, pixel_scale,
-                hfd, hfd_arcsec, snr_median, fwhm_px, fwhm_arcsec, stars,
+                hfd, hfd_arcsec, snr_median, sky_snr, 
+                fwhm_px, fwhm_arcsec, stars,
                 airmass, altitude, azimuth,
                 exptime, gain, offset, ccd_temp,
                 camera, telescope, filter,
@@ -53,12 +54,13 @@ class FitsDatabase:
                 sun_alt, sun_az, moon_phase,
                 sky_background, sky_rms, sky_brightness,
                 bortle, bortle_float
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             record["file_name"], record["file_path"], record["ra"], record["dec"], record["healpix"],
             record["min_ra"], record["max_ra"], record["min_dec"], record["max_dec"],
             record["fov_width"], record["fov_height"], record["pixel_scale"],
-            record["hfd"], record["hfd_arcsec"], record["snr_median"], record["fwhm_px"], record["fwhm_arcsec"], record["stars"],
+            record["hfd"], record["hfd_arcsec"], record["snr_median"], record["sky_snr"],
+            record["fwhm_px"], record["fwhm_arcsec"], record["stars"],
             record["airmass"], record["altitude"], record["azimuth"],
             record["exptime"], record["gain"], record["offset"], record["ccd_temp"],
             record["camera"], record["telescope"], record["filter"],

@@ -61,7 +61,7 @@ class FitsAnalyzer:
 
                 # Pixel scale и FWHM
                 pixel_scale = self.compute_pixel_scale(header, data.shape)
-                fwhm_px, fwhm_arcsec, snr_median = self.compute_fwhm(data, pixel_scale)
+                fwhm_px, fwhm_arcsec, snr_median, sky_snr = self.compute_fwhm(data, pixel_scale)
 
                 # sky brightness / sky backgroud / sky rms
                 sky_brightness, sky_background, sky_rms = self.compute_sky_brightness(
@@ -108,7 +108,7 @@ class FitsAnalyzer:
                     "ra": ra, "dec": dec, "healpix": healpix,
                     "min_ra": min_ra, "max_ra": max_ra, "min_dec": min_dec, "max_dec": max_dec,
                     "fov_width": fov_width, "fov_height": fov_height, "pixel_scale": pixel_scale,
-                    "hfd": hfd, "hfd_arcsec": hfd_arcsec, "snr_median": snr_median,
+                    "hfd": hfd, "hfd_arcsec": hfd_arcsec, "snr_median": snr_median, "sky_snr": sky_snr,
                     "sky_background": sky_background, "sky_rms": sky_rms, "sky_brightness": sky_brightness,
                     "bortle": bortle_class, "bortle_float": bortle_float,
                     "fwhm_px": fwhm_px, "fwhm_arcsec": fwhm_arcsec, "stars": stars,
@@ -277,7 +277,9 @@ class FitsAnalyzer:
             # Медианный SNR
             snr_median = float(np.median(snr_aperture[snr_mask]))
 
-            return fwhm_px, fwhm_arcsec, snr_median
+            sky_snr = np.median(data) / rms
+
+            return fwhm_px, fwhm_arcsec, snr_median, sky_snr
 
         except Exception as e:
             print("FWHM computation error:", e)
