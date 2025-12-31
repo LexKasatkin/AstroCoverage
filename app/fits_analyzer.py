@@ -520,7 +520,7 @@ class FitsAnalyzer:
             return False
         try:
             subprocess.run([self.astap_path, "-f", fits_path, "-o", fits_path],
-                            capture_output=True, text=True, check=True, timeout=60)
+                            capture_output=True, text=True, check=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW)
             return True
         except:
             return False
@@ -530,7 +530,7 @@ class FitsAnalyzer:
             return None, None
         try:
             result = subprocess.run([self.astap_path, "-f", fits_path, "-analyse"],
-                                    capture_output=True, text=True, timeout=15)
+                                    capture_output=True, text=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
             hfd = re.search(r"HFD_MEDIAN\s*=\s*([\d\.]+)", result.stdout)
             stars = re.search(r"STARS\s*=\s*(\d+)", result.stdout)
             return float(hfd.group(1)) if hfd else None, int(stars.group(1)) if stars else None
