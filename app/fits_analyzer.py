@@ -33,16 +33,12 @@ class FitsAnalyzer:
     # ============================
     # Основной метод анализа файла
     # ============================
-    def process_file(self, fits_path, skip_db=False):
+    def process_file(self, fits_path):
         """
         Анализ одного FITS файла. Возвращает словарь record.
         skip_db: если True и запись в БД уже есть, пропускаем файл
         """
         json_path = os.path.splitext(fits_path)[0] + ".json"
-        if skip_db and os.path.exists(json_path):
-            print(f"Skipping {fits_path} (JSON exists and record in DB)")
-            return None
-
         try:
             with fits.open(fits_path, ignore_missing_end=True) as hdul:
                 data = hdul[0].data

@@ -1,0 +1,8 @@
+{
+  "api": {
+    "host": "127.0.0.1",
+    "port": 8000
+  },
+  "astap_path": "C:\\Program Files\\astap\\astap_cli.exe",
+  "telescopes": []
+}

@@ -4,61 +4,61 @@ import json
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from fits_db import FitsDatabase
-from fits_analyzer import FitsAnalyzer
 import psutil
+import requests
 
-# ============================
-# Безопасная обработка одного файла
-# ============================
+from fits_analyzer import FitsAnalyzer
+
+session = requests.Session()
+
+# ------------------ Пакетная проверка ------------------
+def check_skip_db_batch(api_host, api_port, files):
+    try:
+        url = f"http://{api_host}:{api_port}/api/skip_db_batch"
+        r = session.post(url, json={"files": files}, timeout=60)
+        if r.status_code == 200:
+            return r.json()  # словарь file_path -> True/False
+    except Exception as e:
+        print(f"[SKIP_DB_BATCH ERROR] {e}")
+    return {f: False for f in files}
+
+# ------------------ Обработка одного FITS ------------------
 def process_single_fits_safe(args):
-    fits_path, astap_path, cfg_global, skip_db = args
+    fits_path, astap_path, cfg_global = args
     try:
         analyzer = FitsAnalyzer(astap_path, cfg_global)
-        return analyzer.process_file(fits_path, skip_db)
+        return analyzer.process_file(fits_path)
     except Exception as e:
-        print(f"\nERROR processing file:\n{fits_path}")
-        print(str(e))
+        print(f"\nERROR processing:\n{fits_path}")
+        print(e)
         traceback.print_exc()
         return None
 
-# ============================
-# Подбор количества потоков
-# ============================
+# ------------------ Отправка результата ------------------
+def send_to_server(api_url, data):
+    try:
+        r = session.post(api_url, json=data, timeout=10)
+        return r.status_code == 200
+    except Exception as e:
+        print(f"[SEND ERROR] {data.get('file_name')}: {e}")
+        return False
+
+# ------------------ Подбор числа потоков ------------------
 def suggest_max_workers(mem_per_worker_gb=1.5):
-    available_mem_gb = psutil.virtual_memory().available / (1024 ** 3)
-    max_by_mem = max(1, int(available_mem_gb // mem_per_worker_gb))
-    max_by_cpu = os.cpu_count() or 2
-    return min(max_by_mem, max_by_cpu, 8)  # ограничим разумно
+    mem = psutil.virtual_memory().available / (1024 ** 3)
+    return min(os.cpu_count() or 2, max(1, int(mem // mem_per_worker_gb)), 8)
 
-# ============================
-# Основная логика
-# ============================
-def generate_database(config_path, db_path, scan_dirs):
-    start_time = time.perf_counter()
+# ------------------ Главная функция ------------------
+def generate_database(api_host, api_port, scan_dirs):
+    start = time.perf_counter()
 
-    # ----------------------------
-    # Загружаем конфиг или создаем новый
-    # ----------------------------
-    if not os.path.exists(config_path):
-        print(f"Config file not found: {config_path}")
-        print("Creating new empty config.json")
-        cfg_global = {
-            "astap_path": "C:\\Program Files\\astap\\astap_cli.exe",
-            "telescopes": []
-        }
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(cfg_global, f, indent=4)
-    else:
-        with open(config_path, "r", encoding="utf-8") as f:
-            cfg_global = json.load(f)
+    with open("config.json", "r", encoding="utf-8") as f:
+        cfg = json.load(f)
 
-    astap_path = cfg_global.get("astap_path")
-    db = FitsDatabase(db_path)
+    astap_path = cfg["astap_path"]
+    api_url = f"http://{api_host}:{api_port}/api/insert"
 
-    # ---------------------------------
-    # Сбор FITS файлов
-    # ---------------------------------
+    # ------------------ Собираем все FITS-файлы ------------------
     fits_files = []
     for root in scan_dirs:
         for dp, _, fn in os.walk(root):
@@ -66,95 +66,44 @@ def generate_database(config_path, db_path, scan_dirs):
                 if f.lower().endswith((".fits", ".fit", ".fts")):
                     fits_files.append(os.path.join(dp, f))
 
-    print(f"\nFound {len(fits_files)} FITS files")
+    # ------------------ Пакетная проверка ------------------
+    print("Checking which files already exist in DB...")
+    files_status = check_skip_db_batch(api_host, api_port, fits_files)
+    new_fits = [f for f in fits_files if not files_status.get(f, False)]
+    skipped_files = [f for f in fits_files if files_status.get(f, False)]
 
-    # ---------------------------------
-    # Фильтрация
-    # ---------------------------------
-    files_to_process = []
-    skip_db_flags = {}
+    print(f"Found {len(new_fits)} new files to process")
+    if skipped_files:
+        print(f"Skipped {len(skipped_files)} files already in DB:")
+        for f in skipped_files:
+            print("  ", f)
 
-    for f in fits_files:
-        json_path = os.path.splitext(f)[0] + ".json"
-        in_db = db.check_record_exists(os.path.abspath(f))
-        in_json = os.path.exists(json_path)
+    # ------------------ Потоки для обработки ------------------
+    workers = suggest_max_workers()
+    print(f"Using {workers} threads")
 
-        if in_db and in_json:
-            continue
-
-        files_to_process.append(f)
-        skip_db_flags[f] = in_db
-
-    print(f"To process: {len(files_to_process)} files")
-
-    # ---------------------------------
-    # Параллельная обработка
-    # ---------------------------------
-    max_workers = suggest_max_workers()
-    print(f"Using {max_workers} threads")
-
-    processed = 0
-    inserted = 0
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {
-            executor.submit(
-                process_single_fits_safe,
-                (f, astap_path, cfg_global, skip_db_flags[f])
-            ): f
-            for f in files_to_process
+            ex.submit(process_single_fits_safe, (f, astap_path, cfg)): f
+            for f in new_fits
         }
 
         for i, fut in enumerate(as_completed(futures), 1):
-            fpath = futures[fut]
             result = fut.result()
+            if result and send_to_server(api_url, result):
+                print(f"[{i}/{len(futures)}] Sent: {result['file_name']}")
 
-            processed += 1
+    print(f"Done in {time.perf_counter() - start:.1f}s")
 
-            if not result:
-                print(f"[{i}/{len(files_to_process)}] Failed: {fpath}")
-                continue
 
-            record_id = db.insert_record(result)
-            if record_id:
-                inserted += 1
-                print(f"[{i}/{len(files_to_process)}] Inserted: {result['file_name']}")
-            else:
-                print(f"[{i}/{len(files_to_process)}] DB insert failed")
-
-    db.close()
-
-    elapsed = time.perf_counter() - start_time
-
-    print("\n==============================")
-    print("DATABASE GENERATION DONE")
-    print("==============================")
-    print(f"Total FITS found : {len(fits_files)}")
-    print(f"Processed        : {processed}")
-    print(f"Inserted         : {inserted}")
-    print(f"Time elapsed     : {elapsed:.2f} sec")
-    if processed:
-        print(f"Avg per file     : {elapsed / processed:.2f} sec")
-    print("==============================\n")
-
-# ============================
-# ENTRY POINT
-# ============================
+# ------------------ Точка входа ------------------
 if __name__ == "__main__":
-    # Определяем базовую директорию для exe или скрипта
-    if getattr(sys, "frozen", False):
-        BASE_DIR = os.path.dirname(sys.executable)
-    else:
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-    CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
-    DB_PATH = os.path.join(BASE_DIR, "data.sqlite")
-
     scan_dirs = sys.argv[1:]
     if not scan_dirs:
-        print("No directories provided.")
-        print("Usage:")
-        print("  db_generator.exe D:\\FITS1 D:\\FITS2")
+        print("Usage: db_generator.exe D:\\FITS1 D:\\FITS2")
         sys.exit(1)
 
-    generate_database(CONFIG_PATH, DB_PATH, scan_dirs)
+    with open("config.json", "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+
+    generate_database(cfg["api"]["host"], cfg["api"]["port"], scan_dirs)
